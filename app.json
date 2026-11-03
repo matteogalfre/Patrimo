@@ -1,0 +1,91 @@
+{
+  "expo": {
+    "name": "Patrimo",
+    "slug": "patrimo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.matteogalfre.patrimo",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Permet d'exporter vos sauvegardes de patrimoine",
+        "NSFaceIDUsageDescription": "Permet de déverrouiller l'application avec Face ID"
+      }
+    },
+    "android": {
+      "package": "com.matteogalfre.patrimo",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/monochrome-icon.png",
+        "backgroundColor": "#F6F2EC"
+      },
+      "softwareKeyboardLayoutMode": "pan"
+    },
+    "plugins": [
+      "expo-screen-orientation",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permet de déverrouiller l'application avec Face ID"
+        }
+      ],
+      "expo-notifications",
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
+        }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "PortfolioWidget",
+              "label": "Patrimo",
+              "description": "Affiche la valeur de ton patrimoine et sa variation du jour",
+              "minWidth": "250dp",
+              "minHeight": "150dp",
+              "targetCellWidth": 3,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "widgetFeatures": "reconfigurable",
+              "updatePeriodMillis": 1800000
+            },
+            {
+              "name": "PortfolioWidgetSmall",
+              "label": "Patrimo Mini",
+              "description": "Affiche la valeur de ton patrimoine",
+              "minWidth": "110dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 2,
+              "targetCellHeight": 2,
+              "resizeMode": "none",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e19ef016-3a9d-4ec1-806d-d75c183d8136"
+      }
+    },
+    "owner": "matteogalfre"
+  }
+}
