@@ -79,13 +79,15 @@
           ]
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {
         "projectId": "e19ef016-3a9d-4ec1-806d-d75c183d8136"
       }
     },
-    "owner": "matteogalfre"
+    "owner": "matteogalfre",
+    "scheme": "patrimo"
   }
 }

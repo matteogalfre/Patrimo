@@ -8,11 +8,39 @@
  * le temps sans relevé bancaire.
  */
 
-import { officialRate } from './regulatedRates';
+import { minimumRate, officialRate } from './regulatedRates';
 import { formatDateKey } from '../utils/formatters';
 
-// `broker` : l'argent non investi qui attend sur un PEA ou un compte-titres.
-export const CASH_KINDS = Object.freeze(['livretA', 'ldds', 'lep', 'current', 'broker', 'term', 'lifeInsurance', 'other']);
+// `peaCash`, `ctoCash` : l'argent non investi qui attend sur le PEA ou le
+// compte-titres (un dividende pas encore réinvesti…). `broker` est l'ancien
+// type commun aux deux : gardé pour les comptes déjà créés, plus proposé.
+export const CASH_KINDS = Object.freeze([
+  'livretA', 'ldds', 'lep', 'livretJeune', 'cel', 'pel', 'current', 'peaCash', 'ctoCash', 'term', 'lifeInsurance', 'pee', 'percol', 'other', 'broker',
+]);
+
+/** Les types proposés à la création d'un compte. */
+export const PICKABLE_KINDS = Object.freeze(CASH_KINDS.filter((k) => k !== 'broker'));
+
+/** Espèces d'une enveloppe de bourse : le type et l'enveloppe qui va avec. */
+export const ENVELOPE_CASH = Object.freeze({ peaCash: 'PEA', ctoCash: 'CTO' });
+
+/**
+ * Comptes placés en fonds (épargne salariale) : leur valeur suit les
+ * marchés, pas un taux. Ni taux, ni comparaison à l'inflation : on suit le
+ * solde, relevé de temps en temps.
+ */
+export const INVESTED_KINDS = Object.freeze(['pee', 'percol']);
+
+/**
+ * Comptes disponibles tout de suite, sans perte : ceux qui comptent pour
+ * l'épargne de précaution (pas le PEL, l'épargne salariale, l'assurance-vie
+ * ni un compte à terme, bloqués ou longs à récupérer).
+ */
+export const AVAILABLE_KINDS = Object.freeze(['livretA', 'ldds', 'lep', 'livretJeune', 'cel', 'current', 'other']);
+
+export const availableCash = (accounts = []) => accounts
+  .filter((a) => AVAILABLE_KINDS.includes(a.kind))
+  .reduce((s, a) => s + (a.value || 0), 0);
 
 const toNum = (v) => {
   if (v === null || v === undefined || v === '') return null;
@@ -50,7 +78,9 @@ export const normalizeCashAccount = (raw) => {
     kind: CASH_KINDS.includes(raw.kind) ? raw.kind : 'other',
     institution: raw.institution ? String(raw.institution).trim() : null,
     currency: String(raw.currency || 'EUR').toUpperCase(),
-    rate: rate !== null && rate >= 0 ? rate : null,
+    rate: rate !== null && rate >= 0 && !INVESTED_KINDS.includes(raw.kind) ? rate : null,
+    // PEL : la date d'ouverture fixe le taux pour toute la vie du plan.
+    ...(raw.kind === 'pel' && raw.openedAt && toIsoDate(raw.openedAt) ? { openedAt: toIsoDate(raw.openedAt) } : {}),
     history,
     createdAt: raw.createdAt || history[0].date,
     updatedAt: raw.updatedAt || null,
@@ -87,9 +117,11 @@ export const computeCash = ({ accounts = [], fx, today = new Date() }) => {
   const list = accounts.map((a) => {
     const balance = currentBalance(a);
     const value = balance * (fx.now(a.currency) || 0);
-    // Livret A, LDDS, LEP : le taux officiel du moment, pas celui saisi.
-    const official = officialRate(a.kind, today);
-    const rate = official ? official.rate : a.rate;
+    // Livret A, LDDS, LEP, CEL : le taux officiel du moment, pas celui saisi ;
+    // PEL : celui de sa génération ; Livret Jeune : jamais moins que le Livret A.
+    const official = officialRate(a.kind, today, { openedAt: a.openedAt });
+    const floor = minimumRate(a.kind, today);
+    const rate = official ? official.rate : floor ? Math.max(floor.rate, a.rate ?? 0) : a.rate;
     return {
       ...a,
       customRate: a.rate,

@@ -48,3 +48,57 @@ export const fullRebalance = ({ values, targets }) => {
   const sum = total(values);
   return Object.fromEntries(BUCKETS.map((b) => [b, targetsValid(targets) ? (targets[b] / 100) * sum - (values[b] || 0) : 0]));
 };
+
+const STEP = 5;
+const ceilTo = (v, step) => Math.ceil(v / step) * step;
+const roundTo = (v, step) => Math.round(v / step) * step;
+
+/**
+ * Règle la part des actions ou de la crypto ; les liquidités prennent le
+ * reste. Le total fait donc toujours 100 % : impossible de le dépasser.
+ * @param {{stock: number, crypto: number, cash: number}} targets
+ * @param {'stock'|'crypto'} bucket
+ */
+export const setInvestedShare = (targets, bucket, value) => {
+  const other = bucket === 'stock' ? 'crypto' : 'stock';
+  const share = Math.max(0, Math.min(100 - targets[other], value));
+  const next = { ...targets, [bucket]: share };
+  next.cash = 100 - next.stock - next.crypto;
+  return next;
+};
+
+/** Points de départ classiques (en %), à adapter. */
+export const PRESETS = Object.freeze({
+  prudent: { stock: 30, crypto: 0, cash: 70 },
+  balanced: { stock: 60, crypto: 5, cash: 35 },
+  dynamic: { stock: 85, crypto: 5, cash: 10 },
+});
+
+/**
+ * Suggestion d'après l'épargne de précaution : 6 mois de dépenses en
+ * liquidités, la crypto plafonnée à 10 %, le reste en actions et ETF.
+ * @returns {{stock: number, crypto: number, cash: number}|null}
+ */
+export const fundBasedTargets = ({ values, monthlyExpenses, months = 6 }) => {
+  const sum = total(values);
+  if (!(sum > 0) || !(monthlyExpenses > 0)) return null;
+  const cash = Math.min(100, Math.max(STEP, ceilTo(((monthlyExpenses * months) / sum) * 100, STEP)));
+  const crypto = Math.min(10, roundTo(allocationPct(values).crypto, STEP), 100 - cash);
+  return { stock: 100 - cash - crypto, crypto, cash };
+};
+
+/**
+ * Remarques sur la répartition actuelle, de la plus importante à la plus
+ * secondaire. Chaque remarque a ses valeurs ; l'écran se charge du texte.
+ */
+export const rebalanceInsights = ({ values, monthlyExpenses }) => {
+  const out = [];
+  const pct = allocationPct(values);
+  if (monthlyExpenses > 0) {
+    const months = (values.cash || 0) / monthlyExpenses;
+    if (months < 3) out.push({ key: 'cashLow', level: 'warning', months });
+    else if (months > 12) out.push({ key: 'cashHigh', level: 'info', months, surplus: (values.cash || 0) - monthlyExpenses * 6 });
+  }
+  if (pct.crypto > 10) out.push({ key: 'cryptoHigh', level: 'warning', pct: pct.crypto });
+  return out;
+};

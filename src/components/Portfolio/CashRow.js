@@ -8,14 +8,22 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../theme/theme';
 import { useSettings } from '../../context/SettingsContext';
 import AssetLogo from '../AssetLogo';
+import { findInstitution } from '../../core/institutions';
 import { formatPercent } from '../../utils/formatters';
 
 export const CASH_ICONS = {
   livretA: 'leaf-outline',
   ldds: 'leaf-outline',
   lep: 'leaf-outline',
+  livretJeune: 'leaf-outline',
+  cel: 'home-outline',
+  pel: 'home-outline',
+  pee: 'people-outline',
+  percol: 'people-outline',
   current: 'card-outline',
   broker: 'briefcase-outline',
+  peaCash: 'briefcase-outline',
+  ctoCash: 'briefcase-outline',
   term: 'time-outline',
   lifeInsurance: 'shield-checkmark-outline',
   other: 'wallet-outline',
@@ -24,8 +32,9 @@ export const CASH_ICONS = {
 const CashRow = memo(({ account, onPress, isLast }) => {
   const theme = useTheme();
   const { t, formatAmount } = useSettings();
+  const institution = findInstitution(account.institution);
   const subtitle = [
-    account.institution || t(`cash.kinds.${account.kind}`),
+    institution?.name || account.institution || t(`cash.kinds.${account.kind}`),
     account.rate > 0 ? t('cash.rateShort', { rate: formatPercent(account.rate, { showSign: false, decimals: 2 }) }) : null,
   ].filter(Boolean).join(' · ');
 
@@ -37,7 +46,7 @@ const CashRow = memo(({ account, onPress, isLast }) => {
       accessibilityLabel={`${account.name}, ${formatAmount(account.value)}`}
       style={[styles.row, !isLast && { borderBottomColor: theme.colors.borderLight, borderBottomWidth: StyleSheet.hairlineWidth }]}
     >
-      <AssetLogo icon={CASH_ICONS[account.kind] || CASH_ICONS.other} />
+      {institution ? <AssetLogo institution={institution} /> : <AssetLogo icon={CASH_ICONS[account.kind] || CASH_ICONS.other} />}
       <View style={styles.main}>
         <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>{account.name}</Text>
         <Text style={[styles.sub, { color: theme.colors.textTertiary }]} numberOfLines={1}>{subtitle}</Text>

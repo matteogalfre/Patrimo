@@ -1,7 +1,9 @@
 /**
  * Diversification : où est vraiment investi l'argent placé en actions et
- * ETF, par pays et par secteur. Les ETF sont décomposés selon l'indice
- * qu'ils suivent ; ce qui n'est pas classé est listé pour être corrigé.
+ * ETF, par pays, par secteur et par société. Les ETF sont décomposés selon
+ * l'indice qu'ils suivent ; ce qui n'est pas classé est listé pour être
+ * corrigé. La vue « Titres » montre les sociétés qu'on détient à travers
+ * ses ETF et les doublons entre ETF.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -18,6 +20,8 @@ import AssetLogo from '../components/AssetLogo';
 import SegmentedControl from '../components/SegmentedControl';
 import { computeExposure, diversificationInsights } from '../core/exposure';
 import { EXPOSURE_AS_OF } from '../constants/exposureData';
+import { HOLDINGS_AS_OF } from '../constants/indexHoldings';
+import { etfPairs, underlyingCompanies } from '../core/overlap';
 import { OTHERS_COLOR, paletteColor } from '../utils/assetColors';
 import { formatDate, formatPercent } from '../utils/formatters';
 
@@ -27,15 +31,22 @@ const INSIGHT_ICONS = { warning: 'alert-circle', info: 'information-circle', goo
 const DiversificationScreen = ({ navigation }) => {
   const theme = useTheme();
   const { t, locale, formatAmount } = useSettings();
-  const { assets } = usePortfolio();
+  const { assets, overview } = usePortfolio();
   const { exposure: overrides } = usePlanning();
   const [view, setView] = useState('countries');
 
   const exposure = useMemo(() => computeExposure(assets.filter((a) => a.isHeld), overrides), [assets, overrides]);
   const insights = useMemo(() => diversificationInsights(exposure), [exposure]);
+  const companies = useMemo(
+    () => underlyingCompanies(assets.filter((a) => a.isHeld), { overrides, total: overview.value }),
+    [assets, overrides, overview.value],
+  );
+  const pairs = useMemo(() => etfPairs(assets.filter((a) => a.isHeld), overrides), [assets, overrides]);
+  const isHoldings = view === 'holdings';
   const labelOf = (key) => (view === 'countries' ? t(`countries.${key}`) : t(`sectors.${key}`));
-  const list = exposure[view];
-  const unknown = exposure.unknown[view];
+  // La vue « Titres » garde les répartitions par pays pour le reste de l'écran.
+  const list = exposure[isHoldings ? 'countries' : view];
+  const unknown = exposure.unknown[isHoldings ? 'countries' : view];
 
   const slices = useMemo(() => {
     const top = list.filter((x) => x.key !== 'OTHER').slice(0, MAX_SLICES);
@@ -47,7 +58,7 @@ const DiversificationScreen = ({ navigation }) => {
   }, [list, unknown.value, view, locale]);
 
   const leader = list.find((x) => x.key !== 'OTHER');
-  const isMissing = (a) => (a.kind === 'etf' ? !a.profile : !(view === 'countries' ? a.country : a.sector));
+  const isMissing = (a) => (a.kind === 'etf' ? !a.profile : !(view === 'sectors' ? a.sector : a.country));
   const toFix = exposure.assets.filter(isMissing);
   const cardStyle = [styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }];
   const levelColor = { warning: theme.colors.warning, info: theme.colors.textTertiary, good: theme.colors.success };
@@ -87,28 +98,92 @@ const DiversificationScreen = ({ navigation }) => {
         ) : (
           <>
             <SegmentedControl
-              options={['countries', 'sectors'].map((k) => ({ key: k, label: t(`diversification.views.${k}`) }))}
+              options={['countries', 'sectors', 'holdings'].map((k) => ({ key: k, label: t(`diversification.views.${k}`) }))}
               value={view}
               onChange={setView}
               variant="track"
               fill
             />
 
-            <View style={[cardStyle, styles.first]}>
-              {leader && (
-                <Text style={[styles.lead, { color: theme.colors.text }]}>
-                  {t('diversification.lead', { pct: pct(leader.pct), name: labelOf(leader.key) })}
-                </Text>
-              )}
-              <View style={styles.chart}>
-                <AllocationChart data={slices} theme={theme} formatAmount={formatAmount} />
-              </View>
-              <Text style={[styles.footnote, { color: theme.colors.textTertiary }]}>
-                {t('diversification.scope', { amount: formatAmount(exposure.total, { decimals: 0 }) })}
-              </Text>
-            </View>
+            {isHoldings ? (
+              <>
+                <View style={[cardStyle, styles.first]}>
+                  {companies.length > 0 ? (
+                    <>
+                      <Text style={[styles.lead, { color: theme.colors.text }]}>
+                        {t('diversification.holdingsLead', { name: companies[0].name, pct: formatPercent(companies[0].pct, { showSign: false, decimals: 1 }) })}
+                      </Text>
+                      {companies.map((c, i) => {
+                        const via = [...new Set(c.sources.filter((x) => !x.direct).map((x) => x.name))];
+                        const direct = c.sources.some((x) => x.direct);
+                        return (
+                          <View
+                            key={c.ticker}
+                            style={[styles.row, i < companies.length - 1 && { borderBottomColor: theme.colors.borderLight, borderBottomWidth: StyleSheet.hairlineWidth }]}
+                          >
+                            <AssetLogo assetId={`stock:${c.ticker}`} symbol={c.ticker} size={32} />
+                            <View style={styles.rowMain}>
+                              <Text style={[styles.rowName, { color: theme.colors.text }]} numberOfLines={1}>{c.name}</Text>
+                              <Text style={[styles.rowSub, { color: direct && via.length ? theme.colors.warning : theme.colors.textTertiary }]} numberOfLines={2}>
+                                {[via.length ? t('diversification.via', { names: via.join(', ') }) : null, direct ? t('diversification.direct') : null].filter(Boolean).join(' + ')}
+                              </Text>
+                            </View>
+                            <View style={styles.rowRight}>
+                              <Text style={[styles.rowValue, { color: theme.colors.text }]}>{formatPercent(c.pct, { showSign: false, decimals: 1 })}</Text>
+                              <Text style={[styles.rowSub, { color: theme.colors.textTertiary }]}>{formatAmount(c.value, { decimals: 0 })}</Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <Text style={[styles.sub, { color: theme.colors.textSecondary }]}>{t('diversification.holdingsEmpty')}</Text>
+                  )}
+                  <Text style={[styles.footnote, { color: theme.colors.textTertiary }]}>
+                    {t('diversification.holdingsSource', { date: formatDate(HOLDINGS_AS_OF, { locale }) })}
+                  </Text>
+                </View>
 
-            {insights[view].length > 0 && (
+                {pairs.length > 0 && (
+                  <View style={cardStyle}>
+                    <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('diversification.overlapTitle')}</Text>
+                    {pairs.map((p) => (
+                      <View key={`${p.a.assetId}-${p.b.assetId}`} style={styles.insight}>
+                        <Ionicons
+                          name={p.overlap >= 50 ? INSIGHT_ICONS.warning : INSIGHT_ICONS.info}
+                          size={18}
+                          color={p.overlap >= 50 ? theme.colors.warning : theme.colors.textTertiary}
+                          style={styles.insightIcon}
+                        />
+                        <Text style={[styles.insightText, { color: theme.colors.text }]}>
+                          {t(p.overlap >= 99.5 ? 'diversification.overlapSame' : 'diversification.overlapLine', {
+                            a: p.a.name,
+                            b: p.b.name,
+                            pct: formatPercent(p.overlap, { showSign: false, decimals: 0 }),
+                          })}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </>
+            ) : (
+              <View style={[cardStyle, styles.first]}>
+                {leader && (
+                  <Text style={[styles.lead, { color: theme.colors.text }]}>
+                    {t('diversification.lead', { pct: pct(leader.pct), name: labelOf(leader.key) })}
+                  </Text>
+                )}
+                <View style={styles.chart}>
+                  <AllocationChart data={slices} theme={theme} formatAmount={formatAmount} />
+                </View>
+                <Text style={[styles.footnote, { color: theme.colors.textTertiary }]}>
+                  {t('diversification.scope', { amount: formatAmount(exposure.total, { decimals: 0 }) })}
+                </Text>
+              </View>
+            )}
+
+            {!isHoldings && insights[view].length > 0 && (
               <View style={cardStyle}>
                 <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('diversification.insightsTitle')}</Text>
                 {insights[view].map((it) => (
@@ -179,6 +254,7 @@ const styles = StyleSheet.create({
   rowName: { fontSize: 14, fontWeight: '600' },
   rowSub: { fontSize: 12 },
   rowValue: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  rowRight: { alignItems: 'flex-end', gap: 2 },
   source: { fontSize: 11, lineHeight: 15, marginTop: 4, paddingHorizontal: 4 },
 });
 

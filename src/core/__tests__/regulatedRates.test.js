@@ -30,3 +30,26 @@ describe('épargne réglementée', () => {
     expect(cash.yearlyInterest).toBeCloseTo(270, 6);
   });
 });
+
+describe('CEL, PEL, Livret Jeune', () => {
+  const { minimumRate } = require('../regulatedRates');
+
+  test('CEL : deux tiers du Livret A, au quart de point', () => {
+    expect(officialRate('cel', new Date('2026-11-04'))).toEqual({ rate: 1.25, since: '2026-08-01' });
+    expect(officialRate('cel', new Date('2026-03-01')).rate).toBe(1);
+    expect(officialRate('cel', new Date('2024-06-01')).rate).toBe(2);
+  });
+
+  test('PEL : le taux de la génération, fixé à l’ouverture', () => {
+    expect(officialRate('pel', new Date('2026-11-04'), { openedAt: '2024-05-10' })).toEqual({ rate: 2.25, since: '2024-01-01' });
+    expect(officialRate('pel', new Date(), { openedAt: '2019-03-01' }).rate).toBe(1);
+    expect(officialRate('pel', new Date(), { openedAt: '2026-02-01' }).rate).toBe(2);
+    expect(officialRate('pel', new Date())).toBeNull();
+    expect(isRegulated('pel')).toBe(true);
+  });
+
+  test('Livret Jeune : plancher au taux du Livret A', () => {
+    expect(minimumRate('livretJeune', new Date('2026-11-04')).rate).toBe(1.7);
+    expect(minimumRate('livretA')).toBeNull();
+  });
+});

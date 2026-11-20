@@ -20,18 +20,32 @@ import React, {
 import { AppState } from 'react-native';
 
 import { useSettings } from './SettingsContext';
-import { transactionsRepo, dividendsRepo, cashRepo, historyCache } from '../services/storage';
+import { transactionsRepo, dividendsRepo, cashRepo, historyCache, demoMode, loansRepo, propertiesRepo } from '../services/storage';
+import { buildDemoData, DEMO_ASSETS } from '../core/demoData';
 import { marketData } from '../services/marketData';
 import { fxService } from '../services/fxService';
-import { computeInvestedSeries, computePortfolio, computePeaStats, computeValueSeries } from '../core/engine';
+import { DUST, computeInvestedSeries, computePortfolio, computePeaStats, computeValueSeries } from '../core/engine';
 import { createFxConverter, rateAt } from '../core/fx';
 import { ACCOUNTS, positionKey } from '../core/assets';
 import { cashValueSeries, computeCash, normalizeCashAccount, withBalance } from '../core/cash';
 import { computeIncome } from '../core/income';
+import { computeDebts } from '../core/loans';
+import { computeRealEstate, withEstimate } from '../core/realEstate';
 import { formatDateKey } from '../utils/formatters';
 import { MONTHS_SHORT_FR } from '../constants';
 
 const PortfolioContext = createContext(undefined);
+
+// Délai au-delà duquel l'écran s'affiche sans attendre le réseau.
+const NETWORK_DEADLINE = 5000;
+const LATE = Symbol('late');
+const withDeadline = (promise, ms = NETWORK_DEADLINE) => {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => { timer = setTimeout(() => resolve(LATE), ms); }),
+  ]).finally(() => clearTimeout(timer));
+};
 
 const DAY = 24 * 60 * 60 * 1000;
 const PERIOD_DAYS = { '7D': 7, '1M': 30, '3M': 91, '6M': 182, '1Y': 365, ALL: null };
@@ -58,6 +72,13 @@ const uniqueAssets = (transactions) => {
   return [...map.values()];
 };
 
+/** Les actifs encore détenus : seuls eux ont besoin d'un cours du jour. */
+const heldAssets = (transactions) => {
+  const qty = new Map();
+  transactions.forEach((t) => qty.set(t.assetId, (qty.get(t.assetId) || 0) + (t.side === 'sell' ? -t.quantity : t.quantity)));
+  return uniqueAssets(transactions).filter((a) => qty.get(a.assetId) > DUST);
+};
+
 const earliestDate = (transactions, dividends, cashAccounts = []) => {
   let min = null;
   [...transactions, ...dividends, ...cashAccounts.map((a) => a.history[0])].forEach((x) => {
@@ -72,13 +93,18 @@ export const PortfolioProvider = ({ children }) => {
   const [transactions, setTransactions] = useState([]);
   const [dividends, setDividends] = useState([]);
   const [cashAccounts, setCashAccounts] = useState([]);
+  const [loans, setLoans] = useState([]);
+  const [properties, setProperties] = useState([]);
   const [quotes, setQuotes] = useState({});
+  const quotesRef = useRef({});
+  quotesRef.current = quotes;
   const [fxRates, setFxRates] = useState(EMPTY_FX);
   const [histories, setHistories] = useState(EMPTY_HISTORIES);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState(null);
+  const [demo, setDemoState] = useState(false);
 
   const isMounted = useRef(true);
   const loadingRef = useRef(false);
@@ -107,16 +133,25 @@ export const PortfolioProvider = ({ children }) => {
       if (historyCache.isUsable(cached, ids, fromKey)) {
         result = { series: cached.series, currencies: cached.currencies || {} };
       } else {
-        result = await marketData.getHistories(assets, fromDate);
-        // Un actif dont la source a échoué garde son ancien historique.
+        // On ne retélécharge que ce qui manque : les derniers jours d'un actif
+        // déjà en cache (avec une semaine de recouvrement), tout l'historique
+        // d'un actif nouveau.
+        const coversStart = cached && (!cached.from || cached.from <= fromKey);
+        const since = {};
+        if (coversStart) {
+          ids.forEach((id) => {
+            const keys = Object.keys(cached.series[id] || {}).sort();
+            if (keys.length) since[id] = new Date(new Date(`${keys[keys.length - 1]}T12:00:00`).getTime() - 7 * DAY);
+          });
+        }
+        const fresh = await marketData.getHistories(assets, fromDate, since);
+        result = { series: {}, currencies: { ...(cached?.currencies || {}), ...fresh.currencies } };
         ids.forEach((id) => {
-          const fresh = result.series[id];
-          if ((!fresh || !Object.keys(fresh).length) && cached?.series?.[id]) {
-            result.series[id] = cached.series[id];
-            if (cached.currencies?.[id]) result.currencies[id] = cached.currencies[id];
-          }
+          // Un actif dont la source a échoué garde son ancien historique.
+          result.series[id] = { ...(since[id] ? cached.series[id] : {}), ...(fresh.series[id] || {}) };
+          if (!Object.keys(result.series[id]).length && cached?.series?.[id]) result.series[id] = cached.series[id];
         });
-        historyCache.write({ ...result, from: fromKey });
+        historyCache.write({ ...result, from: coversStart && cached.from ? cached.from : fromKey });
       }
       if (!isMounted.current) return;
       setHistories(result);
@@ -155,32 +190,55 @@ export const PortfolioProvider = ({ children }) => {
     setError(null);
 
     try {
-      const [{ data: tx, error: txError }, { data: dv }, { data: cash }] = await Promise.all([
+      const [{ data: tx, error: txError }, { data: dv }, { data: cash }, isDemo, { data: ln }, { data: pr }] = await Promise.all([
         transactionsRepo.getAll(),
         dividendsRepo.getAll(),
         cashRepo.getAll(),
+        demoMode.isOn(),
+        loansRepo.getAll(),
+        propertiesRepo.getAll(),
       ]);
       if (txError) throw txError;
+      if (isMounted.current) setDemoState(isDemo);
 
       const assets = uniqueAssets(tx);
       const fromDate = earliestDate(tx, dv, cash);
       const base = baseRef.current;
 
-      const q = assets.length ? await marketData.getQuotes(assets, { force }).catch(() => ({})) : {};
+      // Un service qui ne répond pas ne doit pas bloquer l'écran : passé le
+      // délai, on affiche avec les derniers cours et taux connus, et on met à
+      // jour quand la réponse arrive.
+      const held = heldAssets(tx);
+      const quotesP = held.length ? marketData.getQuotes(held, { force }).catch(() => ({})) : Promise.resolve({});
+      let q = await withDeadline(quotesP);
+      if (q === LATE) {
+        q = quotesRef.current;
+        quotesP.then((fresh) => isMounted.current && Object.keys(fresh).length && setQuotes(fresh));
+      }
       const currencies = [
         ...tx.map((t) => t.currency),
         ...dv.map((d) => d.currency),
         ...cash.map((a) => a.currency),
         ...Object.values(q).map((x) => x.currency),
       ];
-      const rates = await fxService
+      const ratesP = fxService
         .loadRates(base, currencies, fromDate)
         .catch(() => ({ latest: {}, history: {} }));
+      // Des taux déjà en cache (même d'hier) suffisent pour afficher tout de
+      // suite ; les frais arrivent en arrière-plan.
+      const cachedFx = await fxService.cachedRates(base, currencies);
+      let rates = cachedFx.complete ? LATE : await withDeadline(ratesP);
+      if (rates === LATE) {
+        rates = { latest: cachedFx.latest, history: cachedFx.history };
+        ratesP.then((fresh) => isMounted.current && baseRef.current === base && setFxRates({ base, ...fresh }));
+      }
 
       if (!isMounted.current) return;
       setTransactions(tx);
       setDividends(dv);
       setCashAccounts(cash);
+      setLoans(ln);
+      setProperties(pr);
       setQuotes(q);
       setFxRates({ base, ...rates });
       setLastUpdated(new Date());
@@ -230,6 +288,22 @@ export const PortfolioProvider = ({ children }) => {
   const refresh = useCallback(() => loadData({ force: true }), [loadData]);
   const reload = useCallback(() => loadData({ silent: true }), [loadData]);
 
+  /**
+   * Mode démo : un petit patrimoine d'exemple remplace l'affichage, les
+   * vraies données restent intactes et reviennent quand on le quitte.
+   */
+  const setDemo = useCallback(async (on) => {
+    if (on) {
+      const from = new Date();
+      from.setMonth(from.getMonth() - 21);
+      const { series } = await marketData.getHistories(DEMO_ASSETS, from).catch(() => ({ series: {} }));
+      await demoMode.enable(buildDemoData({ series }));
+    } else {
+      await demoMode.disable();
+    }
+    await loadData({ force: true });
+  }, [loadData]);
+
   // ---------------------------------------------------------------------------
   // Calculs
   // ---------------------------------------------------------------------------
@@ -260,7 +334,15 @@ export const PortfolioProvider = ({ children }) => {
     [dividends, transactions, fx, positions, cash.yearlyInterest],
   );
 
-  /** Patrimoine complet : investissements et liquidités. */
+  // Crédits et immobilier : ta part, à la date du jour.
+  const debts = useMemo(() => computeDebts(loans), [loans]);
+  const realEstate = useMemo(() => computeRealEstate({ properties, loans }), [properties, loans]);
+
+  /**
+   * Patrimoine : `value` reste le patrimoine financier (placements et
+   * liquidités), celui des courbes et des performances ; `netWorth` y ajoute
+   * l'immobilier et retire ce qu'il reste à rembourser sur tous les crédits.
+   */
   const overview = useMemo(() => {
     const value = totals.value + cash.total;
     const previous = value - totals.dailyChange;
@@ -269,9 +351,12 @@ export const PortfolioProvider = ({ children }) => {
       value,
       investedValue: totals.value,
       cashValue: cash.total,
+      realEstateValue: realEstate.value,
+      debt: debts.remaining,
+      netWorth: value + realEstate.value - debts.remaining,
       dailyChangePct: previous > 0 ? (totals.dailyChange / previous) * 100 : 0,
     };
-  }, [totals, cash.total]);
+  }, [totals, cash.total, realEstate.value, debts.remaining]);
 
   const pea = useMemo(
     () => computePeaStats({ transactions, fx, settings: peaSettings || {} }),
@@ -353,6 +438,13 @@ export const PortfolioProvider = ({ children }) => {
     const currencyOf = (id) => quotes[id]?.currency || histories.currencies[id];
     return computeValueSeries({ transactions: tx, dates, priceAt, currencyOf, fx });
   }, [transactions, quotes, histories, sortedHistoryKeys, fx]);
+
+  /** Historique quotidien déjà chargé pour un actif (depuis sa première opération). */
+  const getAssetHistory = useCallback((assetId) => ({
+    series: histories.series[assetId] || null,
+    keys: sortedHistoryKeys[assetId] || [],
+    currency: histories.currencies[assetId] || quotes[assetId]?.currency || null,
+  }), [histories, sortedHistoryKeys, quotes]);
 
   /** Cours de clôture d'un actif à une date, dans sa devise de cotation. */
   const getPriceAtDate = useCallback((assetId, date) => {
@@ -481,6 +573,52 @@ export const PortfolioProvider = ({ children }) => {
     setCashAccounts((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
+  // Crédits et biens immobiliers : saisis à la main, sans cours à charger.
+  const addLoan = useCallback(async (fields) => {
+    const { data: record, error: err } = await loansRepo.add(fields);
+    if (err) throw err;
+    setLoans((prev) => [...prev, record]);
+    return record;
+  }, []);
+  const updateLoan = useCallback(async (id, patch) => {
+    const { data: record, error: err } = await loansRepo.update(id, patch);
+    if (err) throw err;
+    setLoans((prev) => prev.map((x) => (x.id === id ? record : x)));
+    return record;
+  }, []);
+  const deleteLoan = useCallback(async (id) => {
+    const { error: err } = await loansRepo.remove(id);
+    if (err) throw err;
+    setLoans((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+  const addProperty = useCallback(async (fields) => {
+    const { data: record, error: err } = await propertiesRepo.add(fields);
+    if (err) throw err;
+    setProperties((prev) => [...prev, record]);
+    return record;
+  }, []);
+  const updateProperty = useCallback(async (id, patch) => {
+    const { data: record, error: err } = await propertiesRepo.update(id, patch);
+    if (err) throw err;
+    setProperties((prev) => prev.map((x) => (x.id === id ? record : x)));
+    return record;
+  }, []);
+  /** Nouvelle estimation de la valeur d'un bien (remplace celle du même jour). */
+  const recordPropertyValue = useCallback(async (id, value, date = new Date()) => {
+    const property = properties.find((x) => x.id === id);
+    if (!property) throw new Error('NOT_FOUND');
+    return updateProperty(id, { history: withEstimate(property, value, date).history });
+  }, [properties, updateProperty]);
+  const deleteProperty = useCallback(async (id) => {
+    const { error: err } = await propertiesRepo.remove(id);
+    if (err) throw err;
+    setProperties((prev) => prev.filter((x) => x.id !== id));
+    // Un crédit lié reste : il ne pointe plus vers rien.
+    const linked = loans.filter((l) => l.propertyId === id);
+    await Promise.all(linked.map((l) => loansRepo.update(l.id, { propertyId: null })));
+    if (linked.length) setLoans((prev) => prev.map((l) => (l.propertyId === id ? { ...l, propertyId: null } : l)));
+  }, [loans]);
+
   // ---------------------------------------------------------------------------
   // Lectures pratiques pour les écrans
   // ---------------------------------------------------------------------------
@@ -537,9 +675,12 @@ export const PortfolioProvider = ({ children }) => {
     error,
     refresh,
     reload,
+    demo,
+    setDemo,
     getChartData,
     getSparkline,
     getPriceAtDate,
+    getAssetHistory,
     getValuesAt,
     addTransaction,
     updateTransaction,
@@ -558,14 +699,27 @@ export const PortfolioProvider = ({ children }) => {
     recordCashBalance,
     removeCashEntry,
     deleteCashAccount,
+    loans,
+    properties,
+    debts,
+    realEstate,
+    addLoan,
+    updateLoan,
+    deleteLoan,
+    addProperty,
+    updateProperty,
+    recordPropertyValue,
+    deleteProperty,
   }), [
     baseCurrency, transactions, dividends, quotes, fx, positions, assets, totals,
-    warnings, pea, isLoading, isRefreshing, lastUpdated, error, refresh, reload,
-    getChartData, getSparkline, getPriceAtDate, getValuesAt, addTransaction, updateTransaction, deleteTransactions,
+    warnings, pea, isLoading, isRefreshing, lastUpdated, error, refresh, reload, demo, setDemo,
+    getChartData, getSparkline, getPriceAtDate, getAssetHistory, getValuesAt, addTransaction, updateTransaction, deleteTransactions,
     deletePosition, addDividend, updateDividend, deleteDividends, getAsset,
     getPosition, getTransactionsFor, getDividendsFor, getHeldQuantity,
     overview, cash, cashAccounts, income, addCashAccount, updateCashAccount,
     recordCashBalance, removeCashEntry, deleteCashAccount,
+    loans, properties, debts, realEstate, addLoan, updateLoan, deleteLoan,
+    addProperty, updateProperty, recordPropertyValue, deleteProperty,
   ]);
 
   return <PortfolioContext.Provider value={value}>{children}</PortfolioContext.Provider>;

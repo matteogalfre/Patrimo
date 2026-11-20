@@ -12,6 +12,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/theme';
+import AccountInstitution from './Portfolio/AccountInstitution';
 import { useSettings } from '../context/SettingsContext';
 import { formatDate } from '../utils/formatters';
 
@@ -32,7 +33,10 @@ const PeaCard = ({ pea, onPress }) => {
       style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
     >
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.colors.text }]}>{t('pea.title')}</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: theme.colors.text }]}>{t('pea.title')}</Text>
+          <AccountInstitution account="PEA" />
+        </View>
         {pea.isMature && (
           <View style={[styles.badge, { backgroundColor: theme.colors.successBg }]}>
             <Text style={[styles.badgeText, { color: theme.colors.success }]}>{t('pea.matureBadge')}</Text>
@@ -79,6 +83,7 @@ const PeaCard = ({ pea, onPress }) => {
 };
 
 const styles = StyleSheet.create({
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   card: { marginHorizontal: 16, marginBottom: 12, borderRadius: 16, borderWidth: 1, padding: 16 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   title: { fontSize: 16, fontWeight: '700' },

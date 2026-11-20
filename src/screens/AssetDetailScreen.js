@@ -29,12 +29,14 @@ import AlertsModal from '../components/Alerts/AlertsModal';
 import { marketData } from '../services/marketData';
 import { ACCOUNT_ORDER, ASSET_TYPES, parseAssetId } from '../core/assets';
 import AssetLogo from '../components/AssetLogo';
+import AccountInstitution from '../components/Portfolio/AccountInstitution';
 import ChangeBadge from '../components/ChangeBadge';
 import SegmentedControl from '../components/SegmentedControl';
 import { formatDate, formatDateKey, formatPercent } from '../utils/formatters';
 import { classify } from '../core/exposure';
 import { terInfo } from '../core/fees';
 import { historicalReturns } from '../core/assetReturns';
+import { sincePurchase } from '../core/performance';
 import { COUNTRIES, INDEX_HISTORY, INDEX_KEYS, SECTORS } from '../constants/exposureData';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -57,9 +59,11 @@ const AssetDetailScreen = ({ route, navigation }) => {
     quotes,
     getTransactionsFor,
     getDividendsFor,
+    getAssetHistory,
     deleteTransactions,
     deleteDividends,
     deletePosition,
+    fx,
   } = usePortfolio();
   const { getAlertsFor } = useAlerts();
   const { fees, setFee, exposure, setExposure } = usePlanning();
@@ -155,12 +159,21 @@ const AssetDetailScreen = ({ route, navigation }) => {
     setSelected(null);
     const days = PERIODS.find((p) => p.key === period)?.days || 365;
     const from = new Date(Date.now() - days * DAY);
+    const fromKey = formatDateKey(from);
+    // L'historique chargé pour le portefeuille suffit s'il couvre la période
+    // et s'arrête il y a moins de 5 jours : pas de nouvelle requête.
+    const cached = getAssetHistory(assetId);
+    if (cached.series && cached.keys.length && cached.keys[0] <= fromKey && cached.keys[cached.keys.length - 1] >= formatDateKey(Date.now() - 5 * DAY)) {
+      setHistory({ points: cached.keys.filter((k) => k >= fromKey).map((k) => ({ key: k, price: cached.series[k] })), currency: cached.currency });
+      setLoadingChart(false);
+      return undefined;
+    }
     marketData
       .getHistories([{ assetId, assetType, symbol }], from)
       .then(({ series, currencies }) => {
         if (!alive) return;
         const s = series[assetId] || {};
-        const points = Object.keys(s).sort().filter((k) => k >= formatDateKey(from)).map((k) => ({ key: k, price: s[k] }));
+        const points = Object.keys(s).sort().filter((k) => k >= fromKey).map((k) => ({ key: k, price: s[k] }));
         setHistory({ points, currency: currencies[assetId] || null });
       })
       .catch(() => alive && setHistory({ points: [], currency: null }))
@@ -168,16 +181,30 @@ const AssetDetailScreen = ({ route, navigation }) => {
     return () => {
       alive = false;
     };
+    // L'historique en cache n'est relu qu'au changement d'actif ou de période.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetId, assetType, symbol, period]);
 
   const chart = useMemo(() => {
     const all = history.points;
     if (all.length < 2) return null;
     const txDays = new Map();
-    transactions.forEach((tx) => {
-      const k = formatDateKey(tx.date);
+    const addOp = (k, op) => {
       if (!txDays.has(k)) txDays.set(k, []);
-      txDays.get(k).push(tx);
+      txDays.get(k).push(op);
+    };
+    transactions.forEach((tx) => addOp(formatDateKey(tx.date), { ...tx, kind: 'tx' }));
+    // Un dividende versé un jour sans cotation se place sur la séance précédente.
+    dividends.forEach((d) => {
+      const k = formatDateKey(d.date);
+      let at = null;
+      for (let i = all.length - 1; i >= 0; i -= 1) {
+        if (all[i].key <= k) {
+          at = all[i].key;
+          break;
+        }
+      }
+      if (at) addOp(at, { ...d, kind: 'div' });
     });
     // Échantillonnage, en gardant les jours d'opération.
     const step = Math.max(1, Math.ceil(all.length / MAX_POINTS));
@@ -187,8 +214,19 @@ const AssetDetailScreen = ({ route, navigation }) => {
     sampled.forEach((p, i) => {
       const ops = txDays.get(p.key);
       if (!ops) return;
-      const net = ops.reduce((s, o) => s + (o.side === 'sell' ? -o.quantity : o.quantity), 0);
-      markers[i] = { radius: 6, isSell: net < 0, accessibilityLabel: `${t(`transaction.modes.${net < 0 ? 'sell' : 'buy'}`)} ${p.key}` };
+      const trades = ops.filter((o) => o.kind === 'tx');
+      if (trades.length) {
+        const net = trades.reduce((s, o) => s + (o.side === 'sell' ? -o.quantity : o.quantity), 0);
+        markers[i] = { radius: 6, isSell: net < 0, accessibilityLabel: `${t(`transaction.modes.${net < 0 ? 'sell' : 'buy'}`)} ${p.key}` };
+      } else {
+        // Dividende : point plein, pour le distinguer des achats et ventes.
+        markers[i] = {
+          radius: 4.5,
+          fill: theme.colors.secondary,
+          stroke: theme.colors.secondary,
+          accessibilityLabel: `${t('transaction.modes.dividend')} ${p.key}`,
+        };
+      }
       markerOps[i] = ops;
     });
     const span = all.length > 300;
@@ -199,16 +237,23 @@ const AssetDetailScreen = ({ route, navigation }) => {
       const d = new Date(`${p.key}T12:00:00`);
       return span ? `${months[d.getMonth()]} '${String(d.getFullYear()).slice(-2)}` : `${d.getDate()} ${months[d.getMonth()]}`;
     });
+    const kinds = Object.values(markerOps).flat();
     return {
       data: sampled.map((p, i) => ({ x: i, y: p.price })),
       keys: sampled.map((p) => p.key),
       xLabels,
       markers,
       markerOps,
+      // Légende : seulement ce qui apparaît sur la période.
+      legend: [
+        kinds.some((o) => o.kind === 'tx' && o.side !== 'sell') && 'buy',
+        kinds.some((o) => o.kind === 'tx' && o.side === 'sell') && 'sell',
+        kinds.some((o) => o.kind === 'div') && 'dividend',
+      ].filter(Boolean),
       first: sampled[0].price,
       last: sampled[sampled.length - 1].price,
     };
-  }, [history, transactions, t]);
+  }, [history, transactions, dividends, t, theme]);
 
   const quoteCurrency = quote?.currency || history.currency || asset?.quoteCurrency;
   const currentPrice = quote?.price || chart?.last || null;
@@ -388,15 +433,50 @@ const AssetDetailScreen = ({ route, navigation }) => {
             </View>
           )}
 
+          {!!chart?.legend.length && !selectedOps && (
+            <View style={styles.legend}>
+              {chart.legend.map((k) => {
+                const tint = k === 'dividend' ? theme.colors.secondary : k === 'sell' ? theme.colors.error : theme.colors.success;
+                return (
+                  <View key={k} style={styles.legendItem}>
+                    <View style={[styles.legendDot, k === 'dividend' ? { backgroundColor: tint } : { borderColor: tint, borderWidth: 2 }]} />
+                    <Text style={[styles.legendText, { color: theme.colors.textSecondary }]}>{t(`transaction.modes.${k}`)}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
           {selectedOps && (
             <View style={[styles.selected, { borderTopColor: theme.colors.border }]}>
-              {selectedOps.map((op) => (
+              {selectedOps.map((op) => (op.kind === 'div' ? (
                 <Text key={op.id} style={[styles.selectedText, { color: theme.colors.text }]}>
-                  {formatDate(op.date, { locale })} · {t(`transaction.modes.${op.side}`)}{' '}
-                  {formatQty(op.quantity, assetType)}
-                  {op.unitPrice ? ` × ${formatPrice(op.unitPrice, op.currency)}` : ''}
+                  {formatDate(op.date, { locale })} · {t('transaction.modes.dividend')}{' '}
+                  <Text style={{ color: theme.colors.secondary, fontWeight: '700' }}>{formatPrice(op.amount, op.currency)}</Text>
                 </Text>
-              ))}
+              ) : (
+                <View key={op.id}>
+                  <Text style={[styles.selectedText, { color: theme.colors.text }]}>
+                    {formatDate(op.date, { locale })} · {t(`transaction.modes.${op.side}`)}{' '}
+                    {formatQty(op.quantity, assetType)}
+                    {op.unitPrice ? ` × ${formatPrice(op.unitPrice, op.currency)}` : ''}
+                  </Text>
+                  {/* Un achat : ce qu'il a rapporté depuis, au cours d'aujourd'hui. */}
+                  {op.side !== 'sell' && (() => {
+                    const since = sincePurchase(op, { price: currentPrice, currency: quoteCurrency, fx });
+                    if (!since) return null;
+                    const tint = since.gain >= 0 ? theme.colors.success : theme.colors.error;
+                    return (
+                      <Text style={[styles.sinceText, { color: theme.colors.textSecondary }]}>
+                        {t('detail.sinceBuy')}{' '}
+                        <Text style={{ color: tint, fontWeight: '700' }}>
+                          {formatAmount(since.gain, { showSign: true })} ({formatPercent(since.pct)})
+                        </Text>
+                      </Text>
+                    );
+                  })()}
+                </View>
+              )))}
             </View>
           )}
 
@@ -425,7 +505,10 @@ const AssetDetailScreen = ({ route, navigation }) => {
             ]}
           >
             <View style={styles.cardTitleRow}>
-              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t(`accounts.${p.account}`)}</Text>
+              <View style={styles.accountTitle}>
+                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t(`accounts.${p.account}`)}</Text>
+                <AccountInstitution account={p.account} />
+              </View>
               {!p.isHeld && <Text style={[styles.closed, { color: theme.colors.textTertiary }]}>{t('portfolio.closed')}</Text>}
             </View>
             {p.isHeld && statRow(t('detail.quantity'), formatQty(p.quantity, assetType))}
@@ -713,6 +796,10 @@ const AssetDetailScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  legend: { flexDirection: 'row', justifyContent: 'center', gap: 16, paddingTop: 6 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 9, height: 9, borderRadius: 5 },
+  legendText: { fontSize: 12 },
   container: { flex: 1 },
   content: { paddingBottom: 40 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6, gap: 6 },
@@ -745,8 +832,10 @@ const styles = StyleSheet.create({
   muted: { fontSize: 13 },
   selected: { borderTopWidth: 1, marginTop: 8, paddingTop: 8, gap: 2 },
   selectedText: { fontSize: 12 },
+  sinceText: { fontSize: 13, marginTop: 2, marginBottom: 4 },
   periods: { marginTop: 8 },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 },
+  accountTitle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   cardTitle: { fontSize: 15, fontWeight: '700' },
   closed: { fontSize: 12, fontWeight: '600' },
   statRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5, paddingHorizontal: 4 },

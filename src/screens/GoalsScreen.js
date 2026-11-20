@@ -24,9 +24,11 @@ import { usePortfolio } from '../context/PortfolioContext';
 import { useSettings } from '../context/SettingsContext';
 import { usePlanning } from '../context/PlanningContext';
 import DateField from '../components/Transaction/DateField';
-import { useSuggestedMonthly } from '../hooks/useSuggestedMonthly';
+import { useMyNumbers } from '../hooks/useMyNumbers';
 import { averageCashRate, SCENARIOS } from '../core/projection';
 import { emergencyFund, goalStatus } from '../core/goals';
+import { availableCash } from '../core/cash';
+import { emergencyMonths } from '../core/profile';
 import { formatDate } from '../utils/formatters';
 
 const parseNum = (s) => {
@@ -44,14 +46,15 @@ const GoalsScreen = ({ navigation }) => {
   const theme = useTheme();
   const { t, locale, formatAmount, currencySymbol } = useSettings();
   const { overview, cash } = usePortfolio();
-  const { goals, addGoal, removeGoal, monthlyExpenses, setMonthlyExpenses } = usePlanning();
-  const monthly = useSuggestedMonthly();
+  const { goals, addGoal, removeGoal, monthlyExpenses, setMonthlyExpenses, profile } = usePlanning();
+  const monthly = useMyNumbers().savings || 0;
 
   const [expensesInput, setExpensesInput] = useState(monthlyExpenses ? String(monthlyExpenses) : '');
   const [name, setName] = useState('');
   const [target, setTarget] = useState('');
   const [date, setDate] = useState(inFiveYears());
   const [error, setError] = useState(null);
+  const [kind, setKind] = useState(null);
 
   const base = useMemo(() => ({
     invested: Math.max(0, overview.investedValue ?? overview.value - cash.total),
@@ -61,7 +64,15 @@ const GoalsScreen = ({ navigation }) => {
     monthly,
   }), [overview, cash, monthly]);
 
-  const fund = emergencyFund({ cash: cash.total, monthlyExpenses });
+  // Seul l'argent disponible tout de suite compte ; la cible suit le profil
+  // (6 mois pour des revenus irréguliers, plus avec des enfants).
+  const fund = emergencyFund({
+    cash: availableCash(cash.accounts),
+    monthlyExpenses,
+    target: profile?.answers ? emergencyMonths(profile.answers) : 3,
+  });
+  const gaugeMax = fund ? Math.max(12, fund.high + 3) : 12;
+  const gaugePos = fund ? Math.min(1, fund.months / gaugeMax) : 0;
   const cardStyle = [styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }];
   const levelColor = { low: theme.colors.warning, ok: theme.colors.success, high: theme.colors.primary };
 
@@ -71,6 +82,28 @@ const GoalsScreen = ({ navigation }) => {
     if (!(n > 0)) setExpensesInput('');
   };
 
+  // Projets cochés dans le questionnaire, pas encore devenus des objectifs :
+  // un toucher pré-remplit le nom et l'échéance, il reste le montant à mettre.
+  const monthsFromNow = (months) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + months);
+    return d;
+  };
+  const answers = profile?.answers || {};
+  const suggestions = [
+    answers.projects?.includes('home') && { kind: 'home', months: answers.homeWhen === 'soon' ? 18 : 48 },
+    answers.projects?.includes('car') && { kind: 'car', months: 24 },
+    answers.projects?.includes('bigSpend') && { kind: 'bigSpend', months: 12 },
+  ].filter((x) => x && !goals.some((g) => g.kind === x.kind));
+  const applySuggestion = (sug) => {
+    Haptics.selectionAsync();
+    setKind(sug.kind);
+    setName(t(`goals.suggest.${sug.kind}.name`));
+    setDate(monthsFromNow(sug.months));
+    setError(null);
+  };
+  const suggestionHint = kind ? t(`goals.suggest.${kind}.hint`) : null;
+
   const submitGoal = () => {
     const amount = parseNum(target);
     if (!name.trim() || !(amount > 0)) {
@@ -78,12 +111,13 @@ const GoalsScreen = ({ navigation }) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
-    addGoal({ name: name.trim(), target: amount, date: date.toISOString() });
+    addGoal({ name: name.trim(), target: amount, date: date.toISOString(), ...(kind ? { kind } : {}) });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setName('');
     setTarget('');
     setDate(inFiveYears());
     setError(null);
+    setKind(null);
   };
 
   return (
@@ -122,20 +156,40 @@ const GoalsScreen = ({ navigation }) => {
                 <Text style={[styles.big, { color: levelColor[fund.level] }]}>
                   {t('goals.fund.months', { value: fund.months.toLocaleString(locale, { maximumFractionDigits: 1 }) })}
                 </Text>
-                <View style={[styles.track, { backgroundColor: theme.colors.backgroundSecondary }]}>
-                  <View style={[styles.band, { left: '25%', width: '25%', backgroundColor: theme.colors.successBg }]} />
-                  <View style={[styles.fill, { width: `${Math.min(100, (fund.months / 12) * 100)}%`, backgroundColor: levelColor[fund.level] }]} />
+                {/* Trois zones, et un repère qui dit où tu en es. */}
+                <View style={styles.gauge}>
+                  <View
+                    style={[
+                      styles.pin,
+                      gaugePos < 0.15 ? { left: 0 } : gaugePos > 0.85 ? { right: 0 } : { left: `${gaugePos * 100}%`, transform: [{ translateX: -36 }] },
+                    ]}
+                  >
+                    <View style={[styles.pinBubble, { backgroundColor: levelColor[fund.level] }]}>
+                      <Text style={[styles.pinText, { color: theme.colors.onPrimary }]}>
+                        {t('goals.fund.you', { value: fund.months.toLocaleString(locale, { maximumFractionDigits: 1 }) })}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.zones}>
+                    <View style={[styles.zone, { flex: fund.low, backgroundColor: theme.colors.warningBg, borderColor: theme.colors.warning }]} />
+                    <View style={[styles.zone, { flex: fund.high - fund.low, backgroundColor: theme.colors.successBg, borderColor: theme.colors.success }]} />
+                    <View style={[styles.zone, { flex: gaugeMax - fund.high, backgroundColor: theme.colors.primaryMuted, borderColor: theme.colors.primary }]} />
+                  </View>
+                  <View style={[styles.marker, { left: `${gaugePos * 100}%`, backgroundColor: levelColor[fund.level], borderColor: theme.colors.surface }]} />
                 </View>
-                <View style={styles.scale}>
-                  {['0', '3', '6', '9', '12'].map((m) => (
-                    <Text key={m} style={[styles.scaleText, { color: theme.colors.textTertiary }]}>{t('goals.fund.monthShort', { count: m })}</Text>
-                  ))}
+                <View style={styles.zoneLabels}>
+                  <Text style={[styles.zoneLabel, { flex: fund.low, color: fund.level === 'low' ? theme.colors.warning : theme.colors.textTertiary }]} numberOfLines={2}>{t('goals.fund.zones.low')}</Text>
+                  <Text style={[styles.zoneLabel, styles.zoneCenter, { flex: fund.high - fund.low, color: fund.level === 'ok' ? theme.colors.success : theme.colors.textTertiary }]} numberOfLines={2}>
+                    {t('goals.fund.zones.ok', { low: fund.low, high: fund.high })}
+                  </Text>
+                  <Text style={[styles.zoneLabel, styles.zoneRight, { flex: gaugeMax - fund.high, color: fund.level === 'high' ? theme.colors.primary : theme.colors.textTertiary }]} numberOfLines={2}>{t('goals.fund.zones.high')}</Text>
                 </View>
-                <Text style={[styles.sub, { color: theme.colors.textSecondary }]}>
-                  {fund.level === 'low' && t('goals.fund.low', { amount: formatAmount(fund.shortfall, { decimals: 0 }) })}
+                <Text style={[styles.sub, { color: theme.colors.text }]}>
+                  {fund.level === 'low' && t('goals.fund.low', { amount: formatAmount(fund.shortfall, { decimals: 0 }), months: fund.low })}
                   {fund.level === 'ok' && t('goals.fund.ok')}
-                  {fund.level === 'high' && t('goals.fund.high', { amount: formatAmount(fund.surplus, { decimals: 0 }) })}
+                  {fund.level === 'high' && t('goals.fund.high', { amount: formatAmount(fund.surplus, { decimals: 0 }), months: fund.high })}
                 </Text>
+                <Text style={[styles.counted, { color: theme.colors.textTertiary }]}>{t('goals.fund.counted')}</Text>
                 {fund.level === 'high' && (
                   <TouchableOpacity onPress={() => navigation.navigate('Projection')} accessibilityRole="button" style={styles.link}>
                     <Text style={[styles.linkText, { color: theme.colors.primary }]}>{t('goals.fund.simulate')}</Text>
@@ -184,6 +238,27 @@ const GoalsScreen = ({ navigation }) => {
           {/* Nouvel objectif */}
           <View style={cardStyle}>
             <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('goals.newTitle')}</Text>
+            {suggestions.length > 0 && (
+              <>
+                <Text style={[styles.sub, { color: theme.colors.textSecondary }]}>{t('goals.suggest.intro')}</Text>
+                <View style={styles.suggestions}>
+                  {suggestions.map((sug) => {
+                    const active = kind === sug.kind;
+                    return (
+                      <TouchableOpacity
+                        key={sug.kind}
+                        onPress={() => applySuggestion(sug)}
+                        style={[styles.suggestion, { borderColor: active ? theme.colors.primary : theme.colors.border, backgroundColor: active ? theme.colors.primaryMuted : theme.colors.background }]}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name={{ home: 'key-outline', car: 'car-outline', bigSpend: 'sparkles-outline' }[sug.kind]} size={15} color={theme.colors.primary} />
+                        <Text style={[styles.suggestionText, { color: theme.colors.text }]}>{t(`goals.suggest.${sug.kind}.name`)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
             <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('goals.name')}</Text>
             <View style={[styles.inputRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
               <TextInput
@@ -208,6 +283,12 @@ const GoalsScreen = ({ navigation }) => {
               />
               <Text style={[styles.suffix, { color: theme.colors.textTertiary }]}>{currencySymbol}</Text>
             </View>
+            {!!suggestionHint && <Text style={[styles.counted, { color: theme.colors.textTertiary }]}>{suggestionHint}</Text>}
+            {kind === 'home' && (
+              <TouchableOpacity onPress={() => navigation.navigate('HomeBuy')} accessibilityRole="button" style={styles.link}>
+                <Text style={[styles.linkText, { color: theme.colors.primary }]}>{t('homeBuy.fromGoal')}</Text>
+              </TouchableOpacity>
+            )}
             <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('goals.date')}</Text>
             <DateField value={date} onChange={setDate} label={t('goals.date')} allowFuture />
             {!!error && <Text style={[styles.error, { color: theme.colors.error }]}>{error}</Text>}
@@ -241,10 +322,19 @@ const styles = StyleSheet.create({
   suffix: { fontSize: 13, fontWeight: '600' },
   big: { fontSize: 26, fontWeight: '700', marginTop: 14, marginBottom: 8, fontVariant: ['tabular-nums'] },
   track: { height: 8, borderRadius: 4, overflow: 'hidden', marginTop: 10 },
-  band: { position: 'absolute', top: 0, bottom: 0 },
   fill: { height: 8, borderRadius: 4 },
-  scale: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  scaleText: { fontSize: 10 },
+  gauge: { marginTop: 14, paddingTop: 30, height: 30 + 14 },
+  zones: { flexDirection: 'row', height: 14, borderRadius: 7, overflow: 'hidden', gap: 2 },
+  zone: { height: 14, borderBottomWidth: 2 },
+  marker: { position: 'absolute', top: 26, width: 6, height: 22, marginLeft: -3, borderRadius: 3, borderWidth: 1.5 },
+  pin: { position: 'absolute', top: 0, width: 72, alignItems: 'center' },
+  pinBubble: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  pinText: { fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  zoneLabels: { flexDirection: 'row', gap: 2, marginTop: 6 },
+  zoneLabel: { fontSize: 10.5, fontWeight: '600' },
+  zoneCenter: { textAlign: 'center' },
+  zoneRight: { textAlign: 'right' },
+  counted: { fontSize: 11, lineHeight: 15, marginTop: 8 },
   link: { minHeight: 40, justifyContent: 'center' },
   linkText: { fontSize: 14, fontWeight: '600' },
   goalHead: { flexDirection: 'row', alignItems: 'center' },
@@ -254,6 +344,9 @@ const styles = StyleSheet.create({
   button: { minHeight: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
   buttonText: { fontSize: 15, fontWeight: '700' },
   note: { fontSize: 12, lineHeight: 17, paddingHorizontal: 4 },
+  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  suggestion: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 16, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  suggestionText: { fontSize: 13, fontWeight: '600' },
 });
 
 export default GoalsScreen;

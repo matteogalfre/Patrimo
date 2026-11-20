@@ -15,6 +15,7 @@ import { PortfolioProvider, usePortfolio } from './src/context/PortfolioContext'
 import { SettingsProvider, useSettings } from './src/context/SettingsContext';
 import { AlertsProvider } from './src/context/AlertsContext';
 import { PlanningProvider } from './src/context/PlanningContext';
+import { BankProvider } from './src/context/BankContext';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import PinLockScreen from './src/components/PinLockScreen';
 import { deletePinHashSecure, clearFailedAttempts } from './src/utils/pinSecurity';
@@ -52,6 +53,16 @@ import RebalanceScreen from './src/screens/RebalanceScreen';
 import PlansScreen from './src/screens/PlansScreen';
 import FeesScreen from './src/screens/FeesScreen';
 import DiversificationScreen from './src/screens/DiversificationScreen';
+import BenchmarkScreen from './src/screens/BenchmarkScreen';
+import IndependenceScreen from './src/screens/IndependenceScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import BudgetScreen from './src/screens/BudgetScreen';
+import BankConnectionsScreen from './src/screens/BankConnectionsScreen';
+import WealthScreen from './src/screens/WealthScreen';
+import LoanScreen from './src/screens/LoanScreen';
+import PropertyScreen from './src/screens/PropertyScreen';
+import HomeBuyScreen from './src/screens/HomeBuyScreen';
+import MarketsScreen from './src/screens/MarketsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -174,6 +185,16 @@ const MainNavigator = () => {
       <Stack.Screen name="Plans" component={PlansScreen} />
       <Stack.Screen name="Fees" component={FeesScreen} />
       <Stack.Screen name="Diversification" component={DiversificationScreen} />
+      <Stack.Screen name="Benchmark" component={BenchmarkScreen} />
+      <Stack.Screen name="Independence" component={IndependenceScreen} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="Budget" component={BudgetScreen} />
+      <Stack.Screen name="BankConnections" component={BankConnectionsScreen} />
+      <Stack.Screen name="Wealth" component={WealthScreen} />
+      <Stack.Screen name="Loan" component={LoanScreen} />
+      <Stack.Screen name="Property" component={PropertyScreen} />
+      <Stack.Screen name="HomeBuy" component={HomeBuyScreen} />
+      <Stack.Screen name="Markets" component={MarketsScreen} />
     </Stack.Navigator>
   );
 };
@@ -305,9 +326,11 @@ const AppWithErrorBoundary = () => {
     <ErrorBoundary theme={theme} t={t}>
       <PortfolioProvider>
         <PlanningProvider>
-          <AlertsProvider>
-            <AppContent />
-          </AlertsProvider>
+          <BankProvider>
+            <AlertsProvider>
+              <AppContent />
+            </AlertsProvider>
+          </BankProvider>
         </PlanningProvider>
       </PortfolioProvider>
     </ErrorBoundary>

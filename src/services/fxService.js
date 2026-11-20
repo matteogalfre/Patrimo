@@ -7,6 +7,10 @@
  *
  * L'historique est conservé un jour en AsyncStorage : un taux passé ne change
  * plus, inutile de le retélécharger à chaque lancement.
+ *
+ * Si Frankfurter ne répond pas (panne du 4 novembre 2026 : requêtes sans
+ * réponse pendant 20 secondes), on n'insiste pas : délai court, aucune
+ * nouvelle tentative, et Yahoo prend le relais pour toutes les devises.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,6 +28,20 @@ export const ECB_CURRENCIES = new Set([
 ]);
 
 const HISTORY_TTL = 24 * 60 * 60 * 1000;
+// Frankfurter : une seule tentative, courte ; Yahoo sait faire la même chose.
+const ECB_REQUEST = { timeoutMs: 6000 };
+// Après un échec, on ne réessaie pas Frankfurter avant 6 heures.
+const ECB_PAUSE = 6 * 60 * 60 * 1000;
+const ECB_DOWN_KEY = '@patrimo_fx_ecb_down';
+let ecbDownAt = null;
+const ecbAvailable = async () => {
+  if (ecbDownAt === null) ecbDownAt = Number(await AsyncStorage.getItem(ECB_DOWN_KEY).catch(() => 0)) || 0;
+  return Date.now() - ecbDownAt > ECB_PAUSE;
+};
+const markEcbDown = () => {
+  ecbDownAt = Date.now();
+  AsyncStorage.setItem(ECB_DOWN_KEY, String(ecbDownAt)).catch(() => {});
+};
 const LATEST_TTL = 30 * 60 * 1000;
 const cacheKey = (base) => `@patrimo_fx_history_${base}`;
 
@@ -96,20 +114,22 @@ export const fxService = {
     if (fresh && wanted.every((c) => cached.series[c])) return cached.series;
 
     const series = fresh ? { ...cached.series } : {};
-    const ecb = wanted.filter((c) => ECB_CURRENCIES.has(c) && ECB_CURRENCIES.has(base));
+    const ecb = (await ecbAvailable()) ? wanted.filter((c) => ECB_CURRENCIES.has(c) && ECB_CURRENCIES.has(base)) : [];
     const others = wanted.filter((c) => !ecb.includes(c));
 
     if (ecb.length) {
       try {
         const data = await fetchWithRetry(
           `${FRANKFURTER}/${fromKey}..?from=${base}&to=${ecb.join(',')}`,
-          {},
-          2,
+          ECB_REQUEST,
+          0,
         );
         Object.assign(series, invertTimeSeries(data?.rates));
       } catch (err) {
         if (__DEV__) console.warn('[FX] historique BCE indisponible:', err.message);
-        if (cached?.series) ecb.forEach((c) => { if (cached.series[c]) series[c] = cached.series[c]; });
+        markEcbDown();
+        // Sans la BCE, Yahoo pour ces devises aussi.
+        others.push(...ecb.filter((c) => !series[c]));
       }
     }
 
@@ -129,13 +149,14 @@ export const fxService = {
     if (latestMemo.key === memoKey && Date.now() - latestMemo.at < LATEST_TTL) return latestMemo.rates;
 
     const rates = {};
-    const ecb = wanted.filter((c) => ECB_CURRENCIES.has(c) && ECB_CURRENCIES.has(base));
+    const ecb = (await ecbAvailable()) ? wanted.filter((c) => ECB_CURRENCIES.has(c) && ECB_CURRENCIES.has(base)) : [];
     if (ecb.length) {
       try {
-        const data = await fetchWithRetry(`${FRANKFURTER}/latest?from=${base}&to=${ecb.join(',')}`, {}, 2);
+        const data = await fetchWithRetry(`${FRANKFURTER}/latest?from=${base}&to=${ecb.join(',')}`, ECB_REQUEST, 0);
         Object.assign(rates, invertRates(data?.rates));
       } catch (err) {
         if (__DEV__) console.warn('[FX] taux du jour BCE indisponibles:', err.message);
+        markEcbDown();
       }
     }
     await Promise.all(wanted.filter((c) => !rates[c]).map(async (c) => {
@@ -146,6 +167,17 @@ export const fxService = {
     latestMemo = { key: memoKey, at: Date.now(), rates };
     return rates;
   },
+};
+
+/**
+ * Les derniers taux connus, sans attendre le réseau : pour afficher tout de
+ * suite. `complete` : toutes les devises demandées y sont.
+ */
+fxService.cachedRates = async (base, currencies = []) => {
+  const cached = await readHistoryCache(base);
+  const history = cached?.series || {};
+  const wanted = [...new Set(currencies)].filter((c) => c && c !== base);
+  return { latest: {}, history, complete: wanted.every((c) => history[c] && Object.keys(history[c]).length) };
 };
 
 export default fxService;

@@ -175,6 +175,12 @@ export const marketData = {
    * Cours de clôture à une date, pour pré-remplir le prix d'une opération.
    * @returns {Promise<{price: number, currency: string}|null>}
    */
+  /** Dividendes par action d'une action ou d'un ETF (aucun pour une crypto). */
+  async getDividendEvents(asset) {
+    if (!asset?.symbol || asset.assetType === ASSET_TYPES.CRYPTO) return { currency: null, events: [] };
+    return yahooApi.getDividendEvents(asset.symbol);
+  },
+
   async getPriceAt(asset, date) {
     const d = new Date(date);
     const isToday = d.toDateString() === new Date().toDateString();
@@ -193,31 +199,43 @@ export const marketData = {
   },
 
   /**
-   * Historiques quotidiens depuis `fromDate`.
+   * Historiques quotidiens depuis `fromDate`, ou depuis `since[assetId]` pour
+   * un actif dont on a déjà le début : on ne télécharge que ce qui manque.
+   * @param {Object<string, Date|string>} [since]
    * @returns {Promise<{series: Object<string, Object<string, number>>, currencies: Object<string, string>}>}
    */
-  async getHistories(assets = [], fromDate) {
+  async getHistories(assets = [], fromDate, since = {}) {
     const { cryptos, stocks } = split(assets);
-    const days = Math.min(5000, Math.ceil((Date.now() - new Date(fromDate).getTime()) / DAY) + 10);
+    const startOf = (a) => new Date(since[a.assetId] || fromDate);
+    const daysSince = (date) => Math.min(5000, Math.ceil((Date.now() - date.getTime()) / DAY) + 10);
     const series = {};
     const currencies = {};
 
-    for (const a of cryptos) {
-      // Séquentiel : Binance limite le débit et l'historique est mis en cache.
-      // eslint-disable-next-line no-await-in-loop
-      const map = await cryptoService._fetchHistoricalForSymbol(a.symbol, days);
-      series[a.assetId] = map;
-      currencies[a.assetId] = CRYPTO_QUOTE_CURRENCY;
-    }
-    for (let i = 0; i < stocks.length; i += 3) {
-      const batch = stocks.slice(i, i + 3);
-      // eslint-disable-next-line no-await-in-loop
-      const results = await Promise.all(batch.map((a) => yahooApi.getHistory(a.symbol, fromDate)));
-      batch.forEach((a, k) => {
-        series[a.assetId] = results[k].series;
-        if (results[k].currency) currencies[a.assetId] = results[k].currency;
-      });
-    }
+    // Cryptos (Binance) et actions (Yahoo) en même temps, par lots de trois
+    // pour ménager les limites de débit de chacun.
+    const cryptoPart = async () => {
+      for (let i = 0; i < cryptos.length; i += 3) {
+        const batch = cryptos.slice(i, i + 3);
+        // eslint-disable-next-line no-await-in-loop
+        const maps = await Promise.all(batch.map((a) => cryptoService._fetchHistoricalForSymbol(a.symbol, daysSince(startOf(a)))));
+        batch.forEach((a, k) => {
+          series[a.assetId] = maps[k];
+          currencies[a.assetId] = CRYPTO_QUOTE_CURRENCY;
+        });
+      }
+    };
+    const stockPart = async () => {
+      for (let i = 0; i < stocks.length; i += 3) {
+        const batch = stocks.slice(i, i + 3);
+        // eslint-disable-next-line no-await-in-loop
+        const results = await Promise.all(batch.map((a) => yahooApi.getHistory(a.symbol, startOf(a))));
+        batch.forEach((a, k) => {
+          series[a.assetId] = results[k].series;
+          if (results[k].currency) currencies[a.assetId] = results[k].currency;
+        });
+      }
+    };
+    await Promise.all([cryptoPart(), stockPart()]);
     return { series, currencies };
   },
 };

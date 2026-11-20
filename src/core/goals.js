@@ -56,9 +56,20 @@ export const goalStatus = ({ goal, base, today = new Date() }) => {
  * Épargne de précaution : combien de mois de dépenses les liquidités
  * couvrent. Repère courant : 3 à 6 mois.
  */
-export const emergencyFund = ({ cash, monthlyExpenses }) => {
+export const emergencyFund = ({ cash, monthlyExpenses, target = 3 }) => {
   if (!(monthlyExpenses > 0)) return null;
   const months = cash / monthlyExpenses;
-  const level = months < 3 ? 'low' : months <= 6 ? 'ok' : 'high';
-  return { months, level, surplus: level === 'high' ? cash - 6 * monthlyExpenses : 0, shortfall: level === 'low' ? 3 * monthlyExpenses - cash : 0 };
+  // Zone conseillée : de `target` mois (3 d'habitude, 6 pour des revenus
+  // irréguliers) à 3 mois de plus, au moins 6.
+  const low = target;
+  const high = Math.max(6, target + 3);
+  const level = months < low ? 'low' : months <= high ? 'ok' : 'high';
+  return {
+    months,
+    level,
+    low,
+    high,
+    surplus: level === 'high' ? cash - high * monthlyExpenses : 0,
+    shortfall: level === 'low' ? low * monthlyExpenses - cash : 0,
+  };
 };

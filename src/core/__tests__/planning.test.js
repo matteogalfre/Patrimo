@@ -86,3 +86,43 @@ describe('investissements programmés', () => {
     expect(quantityForAmount({ amount: 100, price: 80000, assetType: 'crypto' })).toBeCloseTo(0.00125, 8);
   });
 });
+
+describe('rééquilibrage : cible toujours à 100 %, points de départ, remarques', () => {
+  const { setInvestedShare, fundBasedTargets, rebalanceInsights, PRESETS } = require('../rebalance');
+
+  test('les liquidités prennent le reste, impossible de dépasser 100 %', () => {
+    let t = { stock: 60, crypto: 5, cash: 35 };
+    t = setInvestedShare(t, 'stock', 80);
+    expect(t).toEqual({ stock: 80, crypto: 5, cash: 15 });
+    t = setInvestedShare(t, 'crypto', 40); // plafonnée par la place restante
+    expect(t).toEqual({ stock: 80, crypto: 20, cash: 0 });
+    t = setInvestedShare(t, 'stock', 100);
+    expect(t).toEqual({ stock: 80, crypto: 20, cash: 0 });
+    Object.values(PRESETS).forEach((p) => expect(p.stock + p.crypto + p.cash).toBe(100));
+  });
+
+  test('suggestion selon 6 mois de dépenses, crypto plafonnée à 10 %', () => {
+    const values = { stock: 42000, crypto: 7000, cash: 21000 }; // 70 000 €
+    expect(fundBasedTargets({ values, monthlyExpenses: 2000 })).toEqual({ stock: 70, crypto: 10, cash: 20 });
+    expect(fundBasedTargets({ values, monthlyExpenses: 0 })).toBeNull();
+  });
+
+  test('remarques : trop ou trop peu de liquidités, crypto trop lourde', () => {
+    const keys = (list) => list.map((x) => x.key);
+    expect(keys(rebalanceInsights({ values: { stock: 10000, crypto: 6000, cash: 30000 }, monthlyExpenses: 2000 }))).toEqual(['cashHigh', 'cryptoHigh']); // crypto 13 %
+    expect(keys(rebalanceInsights({ values: { stock: 10000, crypto: 0, cash: 4000 }, monthlyExpenses: 2000 }))).toEqual(['cashLow']);
+    expect(rebalanceInsights({ values: { stock: 10000, crypto: 500, cash: 8000 }, monthlyExpenses: 2000 })).toEqual([]);
+  });
+});
+
+describe('épargne de précaution : se situer', () => {
+  test('zone conseillée selon le profil', () => {
+    expect(emergencyFund({ cash: 14000, monthlyExpenses: 2000 })).toMatchObject({ low: 3, high: 6, level: 'high', surplus: 2000 });
+    expect(emergencyFund({ cash: 10000, monthlyExpenses: 2000, target: 6 })).toMatchObject({ low: 6, high: 9, level: 'low', shortfall: 2000 });
+  });
+
+  test('seuls les comptes disponibles tout de suite comptent', () => {
+    const { availableCash } = require('../cash');
+    expect(availableCash([{ kind: 'livretA', value: 5000 }, { kind: 'pel', value: 20000 }, { kind: 'pee', value: 8000 }, { kind: 'current', value: 1500 }])).toBe(6500);
+  });
+});

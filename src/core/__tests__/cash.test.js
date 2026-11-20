@@ -65,3 +65,31 @@ describe('comptes de liquidités', () => {
     expect(cashValueSeries({ accounts: [livret], dates, fx })).toEqual([10000, 10000, 12000]);
   });
 });
+
+describe('Livret Jeune, épargne salariale', () => {
+  const today = new Date('2026-11-04T12:00:00Z');
+  const make = (kind, extra = {}) => normalizeCashAccount({
+    id: kind, name: kind, kind, history: [{ date: '2026-01-01T12:00:00Z', balance: 1000 }], ...extra,
+  });
+
+  test('Livret Jeune : au moins le taux du Livret A, plus si la banque paie plus', () => {
+    const [plain] = computeCash({ accounts: [make('livretJeune')], fx, today }).accounts;
+    expect(plain.rate).toBe(1.7);
+    const [better] = computeCash({ accounts: [make('livretJeune', { rate: 3 })], fx, today }).accounts;
+    expect(better.rate).toBe(3);
+    const [lower] = computeCash({ accounts: [make('livretJeune', { rate: 1 })], fx, today }).accounts;
+    expect(lower.rate).toBe(1.7);
+  });
+
+  test('PEE et PERCOL : placés en fonds, sans taux', () => {
+    expect(make('pee', { rate: 2 }).rate).toBeNull();
+    const [percol] = computeCash({ accounts: [make('percol')], fx, today }).accounts;
+    expect(percol.yearlyInterest).toBe(0);
+  });
+
+  test('date d’ouverture gardée pour un PEL seulement', () => {
+    expect(make('pel', { openedAt: '2024-03-15' }).openedAt).toBe(new Date('2024-03-15').toISOString());
+    expect(make('pel').openedAt).toBeUndefined();
+    expect(make('cel', { openedAt: '2024-03-15' }).openedAt).toBeUndefined();
+  });
+});

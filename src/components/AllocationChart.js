@@ -23,7 +23,7 @@ const AllocationChart = ({ data, theme, formatAmount }) => {
       <View style={[styles.bar, { backgroundColor: theme.colors.backgroundSecondary }]}>
         {parts.map((p, i) => (
           <View
-            key={p.name}
+            key={p.key || p.name}
             style={[
               styles.segment,
               { flex: p.share, backgroundColor: p.color },
@@ -36,7 +36,7 @@ const AllocationChart = ({ data, theme, formatAmount }) => {
       <View>
         {parts.map((p, i) => (
           <View
-            key={p.name}
+            key={p.key || p.name}
             style={[styles.row, i < parts.length - 1 && { borderBottomColor: theme.colors.borderLight, borderBottomWidth: StyleSheet.hairlineWidth }]}
             accessible
             accessibilityLabel={`${p.name} ${formatPercent(p.share * 100, { showSign: false })}`}

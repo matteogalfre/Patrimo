@@ -9,7 +9,7 @@
  * et montre aussi ce que cette part pourrait perdre sur une mauvaise année.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -32,7 +32,7 @@ import { LineChartSkia } from '../components/charts';
 import SegmentedControl from '../components/SegmentedControl';
 import Slider from '../components/Slider';
 import { averageCashRate, projectPortfolio, SCENARIOS } from '../core/projection';
-import { useSuggestedMonthly } from '../hooks/useSuggestedMonthly';
+import { useMyNumbers } from '../hooks/useMyNumbers';
 import { formatPercent } from '../utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -47,10 +47,38 @@ const ProjectionScreen = ({ navigation }) => {
   const { overview, cash } = usePortfolio();
   const { monthlyExpenses } = usePlanning();
 
-  const suggestedMonthly = useSuggestedMonthly() || 250;
+  // Ce qui part chaque mois : avec un budget, ce qui est investi va aux
+  // placements et ce qui reste dort sur les comptes ; sinon les achats
+  // programmés, le questionnaire ou ce que l'app mesure.
+  const numbers = useMyNumbers();
+  const split = numbers.fromBudget && numbers.invest != null;
+  const suggestedMonthly = Math.round((split ? numbers.invest : numbers.invest || numbers.savings) || (split ? 0 : 250));
+  const suggestedKept = split ? Math.round(numbers.kept || 0) : 0;
+  let monthlyHint = null;
+  if (split) monthlyHint = t('projection.hintBudget', { invest: formatAmount(suggestedMonthly, { decimals: 0, reveal: true }), kept: formatAmount(suggestedKept, { decimals: 0, reveal: true }) });
+  else if (numbers.investFrom === 'plans') monthlyHint = t('projection.hintPlans');
+  else if (numbers.savingsFrom === 'answers') monthlyHint = t('projection.hintAnswers');
+  else if (numbers.savingsFrom === 'measured') monthlyHint = t('projection.monthlyHint', { amount: formatAmount(suggestedMonthly, { decimals: 0, reveal: true }) });
 
   const [monthlyInput, setMonthlyInput] = useState(String(suggestedMonthly));
-  const [years, setYears] = useState(20);
+  const [keptInput, setKeptInput] = useState(String(suggestedKept));
+  // Avec ton âge (questionnaire), un horizon de plus : tes 64 ans, choisi d'office.
+  const retireIn = numbers.age && 64 - numbers.age >= 5 && 64 - numbers.age <= 45 ? 64 - numbers.age : null;
+  const retirementYears = retireIn && !HORIZONS.includes(retireIn) ? retireIn : null;
+  const horizons = retirementYears ? [...HORIZONS, retirementYears].sort((a, b) => a - b) : HORIZONS;
+  const [years, setYears] = useState(retireIn || 20);
+  // Tes chiffres arrivent parfois après l'ouverture de l'écran : tant que tu
+  // n'as rien touché, les champs suivent ton budget et ton âge.
+  const touched = useRef({ monthly: false, kept: false, years: false });
+  useEffect(() => {
+    if (!touched.current.monthly) setMonthlyInput(String(suggestedMonthly));
+    if (!touched.current.kept) setKeptInput(String(suggestedKept));
+    if (!touched.current.years && retireIn) setYears(retireIn);
+  }, [suggestedMonthly, suggestedKept, retireIn]);
+  const edit = (key, setter) => (v) => {
+    touched.current[key] = true;
+    setter(v);
+  };
   const [scenario, setScenario] = useState('median');
   // Liquidités : part investie (en %) et horizon propres à la simulation.
   const [share, setShare] = useState(50);
@@ -58,28 +86,29 @@ const ProjectionScreen = ({ navigation }) => {
   const [spread, setSpread] = useState(12);
 
   const monthly = Math.max(0, Number(String(monthlyInput).replace(/\s/g, '').replace(',', '.')) || 0);
+  const monthlyCash = Math.max(0, Number(String(keptInput).replace(/\s/g, '').replace(',', '.')) || 0);
   const start = Math.max(0, overview.value);
   const invested = Math.max(0, overview.investedValue ?? overview.value - cash.total);
   const cashRate = averageCashRate(cash.total, cash.yearlyInterest);
-  const base = { invested, cash: cash.total, monthly, years, cashRate };
+  const base = { invested, cash: cash.total, monthly, monthlyCash, years, cashRate };
 
   const results = useMemo(() => Object.fromEntries(
     Object.entries(SCENARIOS).map(([key, rate]) => [key, projectPortfolio({ ...base, annualRate: rate })]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [invested, cash.total, monthly, years, cashRate]);
+  ), [invested, cash.total, monthly, monthlyCash, years, cashRate]);
 
   // Liquidités : sans rien changer, puis avec une part investie, sur leur propre horizon.
   const keep = useMemo(() => Object.fromEntries(
     Object.entries(SCENARIOS).map(([key, rate]) => [key, projectPortfolio({ ...base, years: cashYears, annualRate: rate })]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [invested, cash.total, monthly, cashYears, cashRate]);
+  ), [invested, cash.total, monthly, monthlyCash, cashYears, cashRate]);
   const allocated = useMemo(() => Object.fromEntries(
     Object.entries(SCENARIOS).map(([key, rate]) => [
       key,
       projectPortfolio({ ...base, years: cashYears, annualRate: rate, share: share / 100, spreadMonths: spread }),
     ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [invested, cash.total, monthly, cashYears, cashRate, share, spread]);
+  ), [invested, cash.total, monthly, monthlyCash, cashYears, cashRate, share, spread]);
 
   const current = results[scenario];
   const moved = allocated.median.moved;
@@ -95,7 +124,15 @@ const ProjectionScreen = ({ navigation }) => {
   // Garder quelques mois de dépenses : au-delà, le curseur investit l'épargne de précaution.
   const safety = monthlyExpenses > 0 ? monthlyExpenses * SAFETY_MONTHS : 0;
   const maxSafeShare = cash.total > 0 && safety > 0 ? Math.max(0, Math.floor(((cash.total - safety) / cash.total) * 20) * 5) : null;
-  const chartData = current.points.map((p, i) => ({ x: i, y: p.value, y2: p.contributed }));
+  // Les trois scénarios sur la même échelle : le choisi en plein, les autres en fin.
+  // Sinon chaque courbe remplirait tout le cadre et elles auraient l'air identiques.
+  const otherScenarios = Object.keys(SCENARIOS).filter((k) => k !== scenario);
+  const chartData = current.points.map((p, i) => ({
+    x: i,
+    y: p.value,
+    y2: p.contributed,
+    ...Object.fromEntries(otherScenarios.map((k) => [k, results[k].points[i].value])),
+  }));
   const thisYear = new Date().getFullYear();
   const xLabels = current.points.map((p, i) => (i === 0 || i === current.points.length - 1 || p.year % 5 === 0 ? String(thisYear + p.year) : ''));
   const cardStyle = [styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }];
@@ -114,7 +151,10 @@ const ProjectionScreen = ({ navigation }) => {
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={cardStyle}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>{t('projection.inYears', { count: years })}</Text>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+              {t('projection.inYears', { count: years })}
+              {numbers.age ? ` · ${t('projection.atAge', { age: numbers.age + years })}` : ''}
+            </Text>
             <Text style={[styles.big, { color: theme.colors.text }]}>{formatAmount(current.final, { decimals: 0 })}</Text>
             <Text style={[styles.sub, { color: theme.colors.textSecondary }]}>
               {t('projection.range', {
@@ -129,14 +169,16 @@ const ProjectionScreen = ({ navigation }) => {
                 xLabels={xLabels}
                 width={CHART_WIDTH}
                 height={180}
-                color={theme.colors.primary}
+                color={scenarioColors[scenario]}
+                series={otherScenarios.map((k) => ({ key: k, color: `${scenarioColors[k]}80`, width: 1.25 }))}
+                curve="monotoneX"
                 theme={theme}
                 yTickCount={4}
                 formatYLabel={(v) => formatAmount(v, { decimals: 0, compact: true })}
               />
             </View>
             <View style={styles.legend}>
-              <View style={[styles.legendLine, { backgroundColor: theme.colors.primary }]} />
+              <View style={[styles.legendLine, { backgroundColor: scenarioColors[scenario] }]} />
               <Text style={[styles.legendText, { color: theme.colors.textTertiary }]}>{t('projection.legendValue')}</Text>
               <View style={[styles.legendDash, { borderColor: theme.colors.textTertiary }]} />
               <Text style={[styles.legendText, { color: theme.colors.textTertiary }]}>{t('projection.legendContributed')}</Text>
@@ -170,26 +212,39 @@ const ProjectionScreen = ({ navigation }) => {
           </View>
 
           <View style={cardStyle}>
-            <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('projection.monthly')}</Text>
+            <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{split ? t('projection.investedMonthly') : t('projection.monthly')}</Text>
             <View style={[styles.inputRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
               <TextInput
                 value={monthlyInput}
-                onChangeText={setMonthlyInput}
+                onChangeText={edit('monthly', setMonthlyInput)}
                 keyboardType="decimal-pad"
                 style={[styles.input, { color: theme.colors.text }]}
-                accessibilityLabel={t('projection.monthly')}
+                accessibilityLabel={split ? t('projection.investedMonthly') : t('projection.monthly')}
               />
               <Text style={[styles.suffix, { color: theme.colors.textTertiary }]}>{currencySymbol} / {t('projection.perMonth')}</Text>
             </View>
-            <Text style={[styles.hint, { color: theme.colors.textTertiary }]}>
-              {t('projection.monthlyHint', { amount: formatAmount(suggestedMonthly, { decimals: 0, reveal: true }) })}
-            </Text>
+            {split && (
+              <>
+                <Text style={[styles.fieldLabel, styles.spaced, { color: theme.colors.text }]}>{t('projection.kept')}</Text>
+                <View style={[styles.inputRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+                  <TextInput
+                    value={keptInput}
+                    onChangeText={edit('kept', setKeptInput)}
+                    keyboardType="decimal-pad"
+                    style={[styles.input, { color: theme.colors.text }]}
+                    accessibilityLabel={t('projection.kept')}
+                  />
+                  <Text style={[styles.suffix, { color: theme.colors.textTertiary }]}>{currencySymbol} / {t('projection.perMonth')}</Text>
+                </View>
+              </>
+            )}
+            {!!monthlyHint && <Text style={[styles.hint, { color: theme.colors.textTertiary }]}>{monthlyHint}</Text>}
 
             <Text style={[styles.fieldLabel, styles.spaced, { color: theme.colors.text }]}>{t('projection.horizon')}</Text>
             <SegmentedControl
-              options={HORIZONS.map((h) => ({ key: h, label: t('projection.years', { count: h }) }))}
+              options={horizons.map((h) => ({ key: h, label: h === retirementYears ? t('projection.atAgeOption', { age: 64 }) : t('projection.years', { count: h }) }))}
               value={years}
-              onChange={setYears}
+              onChange={edit('years', setYears)}
               variant="track"
               fill
               accessibilityRole="button"

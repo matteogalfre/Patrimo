@@ -35,14 +35,20 @@ import { ResultModal } from '../components';
 import AssetSearchModal from '../components/Transaction/AssetSearchModal';
 import DateField from '../components/Transaction/DateField';
 import { marketData } from '../services/marketData';
+import { expectedDividend } from '../core/income';
+import { flatTaxRate } from '../core/taxRates';
 import { fxService } from '../services/fxService';
 import { createFxConverter } from '../core/fx';
 import { ACCOUNTS, ASSET_TYPES, accountsForType } from '../core/assets';
+import AccountInstitution from '../components/Portfolio/AccountInstitution';
 import { DUST } from '../core/engine';
 import { quantityForAmount } from '../core/plans';
+import { estimateFees, normalizeRule, tariffOf } from '../core/brokerFees';
+import { looksLikeFund } from '../core/fees';
+import { tariffLabel } from '../constants/brokerTariffs';
 import AssetLogo from '../components/AssetLogo';
 import SegmentedControl from '../components/SegmentedControl';
-import { formatDateKey, formatQuantity } from '../utils/formatters';
+import { formatDate, formatDateKey, formatPercent, formatQuantity } from '../utils/formatters';
 
 const parseNum = (s) => {
   const str = String(s ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
@@ -88,7 +94,7 @@ const AddTransactionScreen = ({ navigation, route }) => {
     getHeldQuantity,
   } = usePortfolio();
 
-  const { handlePlan } = usePlanning();
+  const { handlePlan, brokerRules, ttf: ttfEnabled, accountInstitutions } = usePlanning();
   const params = route?.params || {};
   const isStacked = route?.name === 'TransactionForm';
   const editingTx = params.transactionId ? transactions.find((x) => x.id === params.transactionId) : null;
@@ -98,12 +104,13 @@ const AddTransactionScreen = ({ navigation, route }) => {
   const [mode, setMode] = useState(params.mode || 'buy');
   const [asset, setAsset] = useState(params.asset || null);
   const [account, setAccount] = useState(params.account || null);
-  const [date, setDate] = useState(new Date());
+  const [date, setDate] = useState(() => (params.date ? new Date(params.date) : new Date()));
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [priceCurrency, setPriceCurrency] = useState(null);
   const [fees, setFees] = useState('');
-  const [amount, setAmount] = useState('');
+  // Dividende attendu : montant pré-rempli, modifiable.
+  const [amount, setAmount] = useState(() => (params.dividendAmount > 0 ? toInput(params.dividendAmount, locale) : ''));
   const [divCurrency, setDivCurrency] = useState(base);
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState({});
@@ -114,6 +121,7 @@ const AddTransactionScreen = ({ navigation, route }) => {
   const [rateToBase, setRateToBase] = useState(null);
   const priceTouched = useRef(false);
   const qtyTouched = useRef(false);
+  const feesTouched = useRef(false);
 
   // Pré-remplissage en mode modification (une seule fois).
   const loadedEdit = useRef(false);
@@ -130,6 +138,7 @@ const AddTransactionScreen = ({ navigation, route }) => {
       setPrice(toInput(editingTx.unitPrice, locale));
       setPriceCurrency(editingTx.currency);
       setFees(toInput(editingTx.fees, locale));
+      feesTouched.current = true;
       setNotes(editingTx.notes || '');
     } else if (editingDiv) {
       loadedEdit.current = true;
@@ -146,10 +155,23 @@ const AddTransactionScreen = ({ navigation, route }) => {
   const isDividend = mode === 'dividend';
   const dateKey = formatDateKey(date);
 
-  const accountOptions = useMemo(() => {
+  const allowedAccounts = useMemo(() => {
     if (isDividend) return [ACCOUNTS.PEA, ACCOUNTS.CTO];
     return asset ? accountsForType(asset.assetType) : [];
   }, [asset, isDividend]);
+  // Tes enveloppes : celles dont tu as indiqué l'établissement (PEA chez
+  // Bourse Direct…) ou qui ont déjà des opérations. Les autres restent à un
+  // toucher (« Autre enveloppe »), pour une première opération ailleurs.
+  const [showAllAccounts, setShowAllAccounts] = useState(false);
+  const ownedAccounts = useMemo(() => {
+    const used = new Set(transactions.map((x) => x.account));
+    return allowedAccounts.filter((acc) => accountInstitutions?.[acc] || used.has(acc));
+  }, [allowedAccounts, accountInstitutions, transactions]);
+  const accountOptions = useMemo(() => {
+    if (showAllAccounts || isEdit || !ownedAccounts.length) return allowedAccounts;
+    return allowedAccounts.filter((acc) => ownedAccounts.includes(acc) || acc === account);
+  }, [allowedAccounts, ownedAccounts, showAllAccounts, isEdit, account]);
+  const hiddenAccounts = allowedAccounts.filter((acc) => !accountOptions.includes(acc));
 
   // Enveloppe par défaut : celle où l'actif est déjà détenu, sinon la
   // dernière utilisée pour ce type d'actif.
@@ -160,8 +182,32 @@ const AddTransactionScreen = ({ navigation, route }) => {
     const last = [...transactions]
       .filter((x) => x.assetType === asset.assetType && accountOptions.includes(x.account))
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]?.account;
-    setAccount(fromHeld || last || accountOptions[accountOptions.length - 1] || null);
+    setAccount(fromHeld || last || accountOptions[0] || null);
   }, [asset, accountOptions, account, assets, transactions, isEdit]);
+
+  // Dividende : le montant attendu d'après le dividende annoncé (Yahoo) et
+  // tes parts la veille du détachement. Pré-rempli tant que tu n'as rien tapé.
+  const [divEvents, setDivEvents] = useState({ currency: null, events: [] });
+  const amountTouched = useRef(false);
+  useEffect(() => {
+    if (!isDividend || !asset) return undefined;
+    let alive = true;
+    marketData.getDividendEvents(asset).then((r) => alive && setDivEvents(r)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isDividend, asset]);
+  const expected = useMemo(() => {
+    if (!isDividend || !asset || !account || !divEvents.events.length) return null;
+    return expectedDividend({
+      events: divEvents.events,
+      date,
+      account,
+      symbol: asset.symbol,
+      sharesAt: (key) => getHeldQuantity(asset.assetId, account, new Date(`${key}T23:59:59`)),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDividend, asset, account, divEvents, dateKey, getHeldQuantity]);
 
   // Cours de clôture du jour choisi.
   useEffect(() => {
@@ -185,6 +231,15 @@ const AddTransactionScreen = ({ navigation, route }) => {
     || (editingTx?.currency)
     || (asset?.assetType === ASSET_TYPES.CRYPTO ? 'USD' : null);
   const effectiveCurrency = priceCurrency || assetCurrency || base;
+  const expectedCurrency = divEvents.currency || assetCurrency || base;
+  const expectedValue = expected ? expected.net ?? expected.gross : null;
+  const divOptions = [...new Set([base, assetCurrency, divEvents.currency].filter(Boolean))];
+  useEffect(() => {
+    if (!expected || isEdit || amountTouched.current || !divOptions.includes(expectedCurrency)) return;
+    setDivCurrency(expectedCurrency);
+    setAmount(toInput(expectedValue, locale));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expected?.exDate, expectedValue, expectedCurrency]);
   const currencyOptions = [...new Set([assetCurrency, base].filter(Boolean))];
 
   // Taux devise de cotation → devise de référence, au jour de l'opération.
@@ -229,6 +284,43 @@ const AddTransactionScreen = ({ navigation, route }) => {
     if (q > 0) setQuantity(toInput(q, locale));
   }, [params.amount, priceNum, effectiveCurrency, base, rateToBase, asset, isEdit, locale]);
   const feesNum = parseNum(fees) || 0;
+
+  // Frais estimés selon la règle de l'enveloppe, tant que l'utilisateur ne les a pas saisis.
+  const feeEstimate = useMemo(() => {
+    if (isDividend || !asset || !account || !(qtyNum > 0) || !(priceNum > 0)) return null;
+    return estimateFees({
+      rule: brokerRules?.[account],
+      amount: qtyNum * priceNum,
+      side: mode,
+      symbol: asset.symbol,
+      assetType: asset.assetType,
+      date,
+      currency: effectiveCurrency,
+      account,
+      ttf: ttfEnabled,
+      // Un achat programmé suit le barème des plans quand le courtier en a un.
+      plan: !!params.planId,
+      fund: looksLikeFund(asset),
+    });
+  }, [isDividend, asset, account, qtyNum, priceNum, brokerRules, mode, date, effectiveCurrency, ttfEnabled, params.planId]);
+  useEffect(() => {
+    if (!feesTouched.current && feeEstimate) setFees(toInput(feeEstimate.total, locale));
+  }, [feeEstimate, locale]);
+  const ruleLabel = (stored) => {
+    const rule = normalizeRule(stored);
+    if (!rule) return '';
+    const tariff = tariffOf(rule);
+    return tariff ? tariffLabel(tariff) : t(`broker.rules.${rule.type}`);
+  };
+  const feesHint = [
+    feeEstimate && !feesTouched.current
+      ? t('transaction.feesEstimated', {
+        rule: ruleLabel(brokerRules?.[account]),
+        ttf: feeEstimate.ttf > 0 ? t('transaction.feesTtf', { amount: formatPrice(feeEstimate.ttf, effectiveCurrency) }) : '',
+      })
+      : null,
+    t('transaction.feesHelp'),
+  ].filter(Boolean).join(' ');
   const total = qtyNum > 0 && priceNum > 0 ? qtyNum * priceNum + (mode === 'sell' ? -feesNum : feesNum) : null;
   const totalInBase = total == null
     ? null
@@ -258,6 +350,7 @@ const AddTransactionScreen = ({ navigation, route }) => {
     setPrice('');
     setPriceCurrency(null);
     setFees('');
+    feesTouched.current = false;
     setAmount('');
     setNotes('');
     setErrors({});
@@ -486,8 +579,8 @@ const AddTransactionScreen = ({ navigation, route }) => {
             {!!errors.asset && <Text style={[styles.error, { color: theme.colors.error }]}>{errors.asset}</Text>}
           </View>
 
-          {/* Enveloppe */}
-          {accountOptions.length > 1 && (
+          {/* Enveloppe : les tiennes d'abord, avec leur établissement */}
+          {!!asset && (accountOptions.length > 1 || hiddenAccounts.length > 0 || !!accountInstitutions?.[account]) && (
             <View style={styles.section}>
               <Text style={[styles.label, { color: theme.colors.text }]}>{t('transaction.account')}</Text>
               <View style={styles.chips}>
@@ -510,13 +603,34 @@ const AddTransactionScreen = ({ navigation, route }) => {
                         },
                       ]}
                     >
-                      <Text style={[styles.chipText, { color: active ? theme.colors.primary : theme.colors.textSecondary }]}>
-                        {t(`accounts.${acc}`)}
-                      </Text>
+                      <View style={styles.accountChip}>
+                        <Text style={[styles.chipText, { color: active ? theme.colors.primary : theme.colors.textSecondary }]}>
+                          {t(`accounts.${acc}`)}
+                        </Text>
+                        <AccountInstitution account={acc} size={16} showName={false} />
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
+                {hiddenAccounts.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setShowAllAccounts(true);
+                    }}
+                    accessibilityRole="button"
+                    style={[styles.chip, { borderStyle: 'dashed', borderColor: theme.colors.border }]}
+                  >
+                    <Text style={[styles.chipText, { color: theme.colors.textTertiary }]}>{t('transaction.otherAccount')}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
+              {/* Le nom complet de la banque, sous les boutons : dedans, il débordait. */}
+              {!!accountInstitutions?.[account] && (
+                <View style={styles.accountBank}>
+                  <AccountInstitution account={account} size={14} />
+                </View>
+              )}
               {!!errors.account && <Text style={[styles.error, { color: theme.colors.error }]}>{errors.account}</Text>}
             </View>
           )}
@@ -527,10 +641,55 @@ const AddTransactionScreen = ({ navigation, route }) => {
           </View>
 
           {isDividend ? (
-            renderField('amount', t('transaction.dividendAmount'), amount, setAmount, {
-              suffix: currencySwitch([...new Set([base, assetCurrency].filter(Boolean))], divCurrency, setDivCurrency),
-              hint: t('transaction.dividendHint'),
-            })
+            <>
+              {renderField('amount', t('transaction.dividendAmount'), amount, (v) => {
+                amountTouched.current = true;
+                setAmount(v);
+              }, {
+                suffix: currencySwitch(divOptions, divCurrency, setDivCurrency),
+                hint: t('transaction.dividendHint'),
+              })}
+              {!!expected && (
+                <View style={[styles.expected, { backgroundColor: theme.colors.primaryMuted }]}>
+                  <Ionicons name="calculator-outline" size={16} color={theme.colors.primary} />
+                  <View style={styles.expectedBody}>
+                    <Text style={[styles.expectedText, { color: theme.colors.text }]}>
+                      {t('transaction.dividendExpected', {
+                        count: expected.shares,
+                        date: formatDate(expected.exDate, { locale }),
+                        shares: formatQuantity(expected.shares, asset?.assetType, locale),
+                        perShare: formatPrice(expected.perShare, expectedCurrency),
+                        gross: formatPrice(expected.gross, expectedCurrency),
+                      })}
+                      {' '}
+                      {expected.net == null
+                        ? t('transaction.dividendForeign')
+                        : account === ACCOUNTS.PEA
+                          ? t('transaction.dividendNetPea')
+                          : t('transaction.dividendNetCto', {
+                            net: formatPrice(expected.net, expectedCurrency),
+                            rate: formatPercent(flatTaxRate(date.getFullYear()), { showSign: false, decimals: 1 }),
+                          })}
+                    </Text>
+                    {divOptions.includes(expectedCurrency) && (parseNum(amount) !== Math.round(expectedValue * 100) / 100 || divCurrency !== expectedCurrency) && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setDivCurrency(expectedCurrency);
+                          setAmount(toInput(expectedValue, locale));
+                        }}
+                        accessibilityRole="button"
+                        style={styles.expectedUse}
+                      >
+                        <Text style={[styles.expectedUseText, { color: theme.colors.primary }]}>
+                          {t('transaction.dividendUse', { amount: formatPrice(expectedValue, expectedCurrency) })}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              )}
+            </>
           ) : (
             <>
               {renderField('quantity', t('transaction.quantity'), quantity, setQuantity, {
@@ -567,6 +726,10 @@ const AddTransactionScreen = ({ navigation, route }) => {
 
               {renderField('fees', t('transaction.fees'), fees, setFees, {
                 placeholder: t('transaction.feesPlaceholder'),
+                hint: feesHint,
+                onEdit: () => {
+                  feesTouched.current = true;
+                },
                 suffix: <Text style={[styles.suffix, { color: theme.colors.textTertiary }]}>{effectiveCurrency}</Text>,
               })}
 
@@ -651,6 +814,13 @@ const AddTransactionScreen = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
+  expected: { flexDirection: 'row', gap: 8, borderRadius: 12, padding: 12, marginTop: -6, marginBottom: 16 },
+  expectedBody: { flex: 1 },
+  expectedText: { fontSize: 13, lineHeight: 19 },
+  expectedUse: { minHeight: 32, justifyContent: 'center', marginTop: 4 },
+  expectedUseText: { fontSize: 14, fontWeight: '700' },
+  accountChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 6 },
+  accountBank: { marginTop: 8, marginLeft: 2 },
   container: { flex: 1 },
   content: { paddingBottom: 40 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, gap: 4 },

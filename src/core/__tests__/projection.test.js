@@ -57,3 +57,17 @@ describe('investir ses liquidités', () => {
     expect(averageCashRate(0, 0)).toBe(0);
   });
 });
+
+
+describe('projectPortfolio : ce qui reste sans être investi', () => {
+  it('va aux liquidités, au taux des livrets, pas au rendement des placements', () => {
+    const { projectPortfolio } = require('../projection');
+    const a = projectPortfolio({ monthly: 900, monthlyCash: 193, years: 1, annualRate: 7, cashRate: 0 });
+    const b = projectPortfolio({ monthly: 1093, years: 1, annualRate: 7, cashRate: 0 });
+    expect(a.contributed).toBeCloseTo(1093 * 12, 6);
+    expect(a.final).toBeLessThan(b.final);
+    // Sans intérêt sur les liquidités, les 193 € restent tels quels.
+    const kept = projectPortfolio({ monthlyCash: 193, years: 1, annualRate: 7, cashRate: 0 });
+    expect(kept.final).toBeCloseTo(193 * 12, 6);
+  });
+});

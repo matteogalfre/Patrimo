@@ -17,6 +17,8 @@ import { STORAGE_KEYS } from '../constants';
 import { useSettings } from './SettingsContext';
 import { syncMonthlyReminders } from '../services/notifications';
 import { markHandled } from '../core/plans';
+import { ruleForInstitution, tariffOf } from '../core/brokerFees';
+import { budgetTotals } from '../core/budget';
 
 const PlanningContext = createContext(undefined);
 
@@ -29,7 +31,19 @@ const DEFAULT = {
   plans: [],
   fees: {},
   exposure: {},
+  dismissedDividends: [],
+  brokerRules: {},
+  accountInstitutions: {},
+  ttf: true,
   reminders: { plans: true, cash: false },
+  // Profil d'investisseur : réponses au questionnaire et date.
+  profile: null,
+  // Budget du mois : revenus, investissements et dépenses par catégorie.
+  budget: null,
+  // Accueil de la première ouverture déjà proposé.
+  onboarded: false,
+  // Plan anti-panique : « si l'indice passe à −X %, préviens-moi pour investir Y € ».
+  marketRules: {},
 };
 
 /** Ce qui est persisté et part dans les sauvegardes. */
@@ -40,7 +54,15 @@ const exportable = (state) => ({
   plans: state.plans,
   fees: state.fees,
   exposure: state.exposure,
+  dismissedDividends: state.dismissedDividends,
+  brokerRules: state.brokerRules,
+  accountInstitutions: state.accountInstitutions,
+  ttf: state.ttf,
   reminders: state.reminders,
+  marketRules: state.marketRules,
+  profile: state.profile,
+  budget: state.budget,
+  onboarded: state.onboarded,
 });
 
 const newId = (prefix) => {
@@ -96,6 +118,15 @@ export const PlanningProvider = ({ children }) => {
   // --- Répartition cible ----------------------------------------------------
   const setTargets = useCallback((targets) => update({ targets }), [update]);
 
+  // --- Plan anti-panique (marchés) ------------------------------------------
+  /** Règle d'un marché, ou null pour la retirer. */
+  const setMarketRule = useCallback((id, rule) => update((p) => {
+    const marketRules = { ...(p.marketRules || {}) };
+    if (rule) marketRules[id] = rule;
+    else delete marketRules[id];
+    return { marketRules };
+  }), [update]);
+
   // --- Investissements programmés -------------------------------------------
   const addPlan = useCallback((plan) => update((p) => ({ plans: [...p.plans, { ...plan, id: newId('plan'), active: true, handled: [] }] })), [update]);
   const updatePlan = useCallback((id, patch) => update((p) => ({ plans: p.plans.map((x) => (x.id === id ? { ...x, ...patch } : x)) })), [update]);
@@ -121,7 +152,51 @@ export const PlanningProvider = ({ children }) => {
     return { exposure };
   }), [update]);
 
+  /** Dividende attendu mais pas reçu : on ne le propose plus. */
+  const dismissDividend = useCallback((key) => update((p) => ({
+    dismissedDividends: [...new Set([...(p.dismissedDividends || []), key])].slice(-50),
+  })), [update]);
+
+  // --- Frais de courtage : règle par enveloppe, TTF ---------------------------
+  const setBrokerRule = useCallback((account, rule) => update((p) => {
+    const brokerRules = { ...p.brokerRules };
+    if (rule && rule.type !== 'none') brokerRules[account] = rule;
+    else delete brokerRules[account];
+    return { brokerRules };
+  }), [update]);
+  const setTtf = useCallback((ttf) => update({ ttf: !!ttf }), [update]);
+
+  /**
+   * Établissement d'une enveloppe. Sa grille de frais connue s'applique si
+   * aucune règle n'est choisie, ou si la règle était la grille de l'ancien
+   * établissement : une règle saisie à la main n'est jamais écrasée.
+   */
+  const setAccountInstitution = useCallback((account, id) => update((p) => {
+    const accountInstitutions = { ...p.accountInstitutions };
+    const previous = accountInstitutions[account];
+    if (id) accountInstitutions[account] = id;
+    else delete accountInstitutions[account];
+    const known = id ? ruleForInstitution(id, account) : null;
+    const current = p.brokerRules?.[account];
+    const replaceable = !current || (previous && tariffOf(current)?.institution === previous);
+    const brokerRules = known && replaceable ? { ...p.brokerRules, [account]: known } : p.brokerRules;
+    return { accountInstitutions, brokerRules };
+  }), [update]);
+
   const setReminders = useCallback((patch) => update((p) => ({ reminders: { ...p.reminders, ...patch } })), [update]);
+
+  const setOnboarded = useCallback(() => update({ onboarded: true }), [update]);
+
+  /** Budget du mois ; ses dépenses deviennent celles de l'épargne de précaution. */
+  const setBudget = useCallback((budget) => update((p) => {
+    const expenses = budget ? budgetTotals(budget).expenses : 0;
+    return { budget, monthlyExpenses: expenses > 0 ? expenses : p.monthlyExpenses };
+  }), [update]);
+
+  /** Questionnaire terminé : les réponses, et les dépenses mensuelles qu'il a demandées. */
+  const setProfile = useCallback((answers) => update(answers
+    ? { profile: { answers, completedAt: new Date().toISOString() }, monthlyExpenses: answers.expenses > 0 ? answers.expenses : null }
+    : { profile: null }), [update]);
 
   // Rappels mensuels : un par plan actif, plus la mise à jour des livrets.
   useEffect(() => {
@@ -169,21 +244,29 @@ export const PlanningProvider = ({ children }) => {
     removeGoal,
     setMonthlyExpenses,
     setTargets,
+    setMarketRule,
     addPlan,
     updatePlan,
     removePlan,
     handlePlan,
     setFee,
     setExposure,
+    dismissDividend,
+    setBrokerRule,
+    setTtf,
+    setAccountInstitution,
     setReminders,
+    setProfile,
+    setBudget,
+    setOnboarded,
     setBackupPassword,
     getBackupPassword,
     backupSettings,
     applyImported,
   }), [
-    state, hydrated, hasPassword, addGoal, removeGoal, setMonthlyExpenses, setTargets,
-    addPlan, updatePlan, removePlan, handlePlan, setFee, setExposure, setReminders,
-    setBackupPassword, getBackupPassword, backupSettings, applyImported,
+    state, hydrated, hasPassword, addGoal, removeGoal, setMonthlyExpenses, setTargets, setMarketRule,
+    addPlan, updatePlan, removePlan, handlePlan, setFee, setExposure, dismissDividend, setBrokerRule, setTtf, setAccountInstitution, setReminders,
+    setProfile, setBudget, setOnboarded, setBackupPassword, getBackupPassword, backupSettings, applyImported,
   ]);
 
   return <PlanningContext.Provider value={value}>{children}</PlanningContext.Provider>;

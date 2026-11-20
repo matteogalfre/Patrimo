@@ -1,10 +1,12 @@
 /**
  * Feuille de choix dans une liste : un titre, des options, une coche sur
- * l'option courante. Le choix ferme la feuille.
+ * l'option courante. Le choix ferme la feuille. Une option peut porter un
+ * élément à gauche (`left`, un logo par exemple), un court texte à droite
+ * (`hint`) ou une ligne sous son nom (`sub`).
  */
 
 import React from 'react';
-import { Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
@@ -33,7 +35,11 @@ const OptionSheet = ({ visible, onClose, title, message, options = [], value, on
               accessibilityRole="button"
               accessibilityState={{ selected }}
             >
-              <Text style={[styles.label, { color: selected ? theme.colors.primary : theme.colors.text }]}>{o.label}</Text>
+              {o.left}
+              <View style={styles.labels}>
+                <Text style={[styles.label, { color: selected ? theme.colors.primary : theme.colors.text }]}>{o.label}</Text>
+                {!!o.sub && <Text style={[styles.sub, { color: theme.colors.textTertiary }]}>{o.sub}</Text>}
+              </View>
               {!!o.hint && <Text style={[styles.hint, { color: theme.colors.textTertiary }]} numberOfLines={1}>{o.hint}</Text>}
               {selected && <Ionicons name="checkmark" size={20} color={theme.colors.primary} />}
             </TouchableOpacity>
@@ -49,7 +55,9 @@ const styles = StyleSheet.create({
   message: { fontSize: 14, lineHeight: 20, marginTop: 6 },
   list: { paddingTop: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
-  label: { flex: 1, fontSize: 15, fontWeight: '600' },
+  labels: { flex: 1 },
+  label: { fontSize: 15, fontWeight: '600' },
+  sub: { fontSize: 12, lineHeight: 17, marginTop: 2 },
   hint: { fontSize: 12, maxWidth: '45%' },
 });
 

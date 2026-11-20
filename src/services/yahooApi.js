@@ -7,8 +7,13 @@
  *
  * API non officielle : pas de clé, mais pas de contrat non plus. Chaque appel
  * est donc protégé (retry, cache, repli sur la dernière valeur connue).
+ *
+ * Les cours du jour passent par une seule requête groupée (« spark », jusqu'à
+ * 20 titres) ; elle ne donne pas la devise, retenue à la première cotation
+ * de chaque titre (requête « chart », une fois pour toutes).
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchWithRetry } from './apiClient';
 import { formatDateKey } from '../utils/formatters';
 import { normalizeQuoteCurrency } from '../core/fx';
@@ -19,6 +24,50 @@ const YH_HEADERS = { Accept: 'application/json' };
 const QUOTE_TTL = 60 * 1000;
 const quoteCache = new Map(); // symbol -> { at, value }
 const weeklyCache = new Map(); // symbol -> { currency, series }
+// Dividendes par titre, pour la session : ils ne changent qu'une ou deux fois par an.
+const dividendCache = new Map();
+
+// Un cours du jour : vite, une seule nouvelle tentative.
+const QUOTE_REQUEST = { headers: YH_HEADERS, timeoutMs: 8000 };
+const SPARK_CHUNK = 20;
+
+// Devise de cotation de chaque titre (telle que Yahoo l'écrit, GBp compris).
+const CURRENCY_KEY = '@patrimo_quote_currencies';
+let currencies = null;
+const loadCurrencies = async () => {
+  if (!currencies) {
+    try {
+      currencies = JSON.parse((await AsyncStorage.getItem(CURRENCY_KEY)) || '{}') || {};
+    } catch {
+      currencies = {};
+    }
+  }
+  return currencies;
+};
+const rememberCurrency = (symbol, raw) => {
+  if (!raw || !currencies || currencies[symbol] === raw) return;
+  currencies[symbol] = raw;
+  AsyncStorage.setItem(CURRENCY_KEY, JSON.stringify(currencies)).catch(() => {});
+};
+
+/** Cours de plusieurs titres en une requête ; les absents de la réponse sont ignorés. */
+const fetchSpark = async (symbols, known) => {
+  const data = await fetchWithRetry(
+    `${YH_BASE}/v8/finance/spark?symbols=${symbols.map(encodeURIComponent).join(',')}&range=1d&interval=1d`,
+    QUOTE_REQUEST,
+    1,
+  );
+  const out = {};
+  symbols.forEach((symbol) => {
+    const r = data?.[symbol];
+    const closes = (r?.close || []).filter((c) => Number.isFinite(c) && c > 0);
+    const value = closes.length
+      ? parseChartMeta({ regularMarketPrice: closes[closes.length - 1], chartPreviousClose: r.chartPreviousClose, currency: known[symbol] })
+      : null;
+    if (value) out[symbol] = value;
+  });
+  return out;
+};
 
 /** Lit le bloc `meta` d'une réponse chart et normalise prix et devise. */
 export const parseChartMeta = (meta) => {
@@ -70,20 +119,46 @@ export const yahooApi = {
    */
   async getQuotes(symbols = [], { force = false } = {}) {
     const out = {};
-    await runInBatches(symbols, async (symbol) => {
+    const stale = symbols.filter((symbol) => {
       const hit = quoteCache.get(symbol);
       if (!force && hit && Date.now() - hit.at < QUOTE_TTL) {
         out[symbol] = hit.value;
-        return;
+        return false;
       }
+      return true;
+    });
+    if (!stale.length) return out;
+
+    // Titres dont on connaît la devise : tous ensemble, en une requête.
+    const known = await loadCurrencies();
+    const grouped = stale.filter((s) => known[s]);
+    for (let i = 0; i < grouped.length; i += SPARK_CHUNK) {
+      const chunk = grouped.slice(i, i + SPARK_CHUNK);
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const values = await fetchSpark(chunk, known);
+        Object.entries(values).forEach(([symbol, value]) => {
+          quoteCache.set(symbol, { at: Date.now(), value: { ...quoteCache.get(symbol)?.value, ...value } });
+          out[symbol] = quoteCache.get(symbol).value;
+        });
+      } catch (err) {
+        if (__DEV__) console.warn('[Yahoo] cotations groupées:', err.message);
+      }
+    }
+
+    // Les autres (nouveaux titres, ou absents de la réponse groupée) : un par un.
+    await runInBatches(stale.filter((s) => !out[s]), async (symbol) => {
+      const hit = quoteCache.get(symbol);
       try {
         const data = await fetchWithRetry(
           `${YH_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`,
-          { headers: YH_HEADERS },
-          2,
+          QUOTE_REQUEST,
+          1,
         );
-        const value = parseChartMeta(data?.chart?.result?.[0]?.meta);
+        const meta = data?.chart?.result?.[0]?.meta;
+        const value = parseChartMeta(meta);
         if (value) {
+          rememberCurrency(symbol, meta.currency);
           quoteCache.set(symbol, { at: Date.now(), value });
           out[symbol] = value;
         } else if (hit) {
@@ -140,6 +215,35 @@ export const yahooApi = {
     const value = parseChartSeries(data?.chart?.result?.[0]);
     if (Object.keys(value.series).length) weeklyCache.set(symbol, value);
     return value;
+  },
+
+  /**
+   * Dividendes par action des 5 dernières années, à leur date de
+   * détachement, gardés pour la session.
+   * @returns {Promise<{currency: string|null, events: Array<{date: string, amount: number}>}>}
+   */
+  async getDividendEvents(symbol) {
+    const hit = dividendCache.get(symbol);
+    if (hit) return hit;
+    try {
+      const data = await fetchWithRetry(
+        `${YH_BASE}/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1mo&range=5y&events=div`,
+        { headers: YH_HEADERS, timeoutMs: 8000 },
+        1,
+      );
+      const result = data?.chart?.result?.[0];
+      const { currency, divisor } = normalizeQuoteCurrency(result?.meta?.currency);
+      const events = Object.values(result?.events?.dividends || {})
+        .map((e) => ({ date: formatDateKey(new Date(e.date * 1000)), amount: Number(e.amount) / divisor }))
+        .filter((e) => e.amount > 0)
+        .sort((a, b) => (a.date < b.date ? -1 : 1));
+      const value = { currency, events };
+      dividendCache.set(symbol, value);
+      return value;
+    } catch (err) {
+      if (__DEV__) console.warn(`[Yahoo] dividendes ${symbol}:`, err.message);
+      return { currency: null, events: [] };
+    }
   },
 
   /**

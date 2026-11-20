@@ -48,7 +48,7 @@ export const averageMonthlySavings = (investedYearAgo, investedNow) => {
  * @returns {{points: Array<{year: number, value: number, contributed: number}>, final: number, contributed: number, gains: number, moved: number}}
  */
 export const projectPortfolio = ({
-  invested = 0, cash = 0, monthly = 0, years = 10, annualRate = 5, cashRate = 0, share = 0, spreadMonths = 0,
+  invested = 0, cash = 0, monthly = 0, monthlyCash = 0, years = 10, annualRate = 5, cashRate = 0, share = 0, spreadMonths = 0,
 }) => {
   const r = (1 + annualRate / 100) ** (1 / 12) - 1;
   const rc = (1 + cashRate / 100) ** (1 / 12) - 1;
@@ -61,8 +61,9 @@ export const projectPortfolio = ({
   for (let m = 1; m <= years * 12; m += 1) {
     const transfer = m <= spreadMonths ? Math.min(perMonth, liquid) : 0;
     inv = (inv + transfer) * (1 + r) + monthly;
-    liquid = (liquid - transfer) * (1 + rc);
-    contributed += monthly;
+    // Ce qui reste chaque mois sans être investi dort sur les comptes, au taux des livrets.
+    liquid = (liquid - transfer) * (1 + rc) + Math.max(0, monthlyCash);
+    contributed += monthly + Math.max(0, monthlyCash);
     if (m % 12 === 0) points.push({ year: m / 12, value: inv + liquid, contributed });
   }
   const final = inv + liquid;

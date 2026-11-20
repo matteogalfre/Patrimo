@@ -68,3 +68,49 @@ describe('dividendes à venir', () => {
     expect(months.find((m) => m.key === '2027-04').total).toBeCloseTo(15, 6);
   });
 });
+
+describe('dividendes à confirmer', () => {
+  const { dueDividends } = require('../income');
+  const tx = (assetId, quantity, date) => ({ assetId, account: 'PEA', side: 'buy', quantity, date });
+  const d = (id, assetId, amount, date) => ({ id, assetId, symbol: assetId.split(':')[1], name: assetId.split(':')[1], account: 'PEA', amount, currency: 'EUR', date });
+  const transactions = [tx('stock:RI.PA', 2, '2024-01-03T12:00:00Z'), tx('stock:MC.PA', 1, '2023-10-30T12:00:00Z')];
+
+  test('le solde Pernod de juillet 2026 manque : proposé, au même montant pour 2 actions', () => {
+    const dividends = [d('a', 'stock:RI.PA', 4.7, '2025-07-25T12:00:00Z'), d('b', 'stock:MC.PA', 7.5, '2025-04-28T12:00:00Z'), d('c', 'stock:MC.PA', 7.5, '2026-04-30T12:00:00Z')];
+    const due = dueDividends({ dividends, transactions, fx, today: new Date('2026-08-10T12:00:00Z') });
+    expect(due).toHaveLength(1);
+    expect(due[0]).toMatchObject({ symbol: 'RI.PA', amount: 4.7, key: 'stock:RI.PA:2026-07' });
+  });
+
+  test('déjà saisi, écarté par l’utilisateur ou trop ancien : rien', () => {
+    const base = [d('a', 'stock:RI.PA', 4.7, '2025-07-25T12:00:00Z')];
+    const today = new Date('2026-08-10T12:00:00Z');
+    expect(dueDividends({ dividends: [...base, d('x', 'stock:RI.PA', 4.7, '2026-07-24T12:00:00Z')], transactions, fx, today })).toEqual([]);
+    expect(dueDividends({ dividends: base, transactions, fx, today, dismissed: ['stock:RI.PA:2026-07'] })).toEqual([]);
+    expect(dueDividends({ dividends: base, transactions, fx, today: new Date('2026-12-20T12:00:00Z') })).toEqual([]);
+    // Ton cas : le solde Pernod de juillet, toujours proposé début novembre.
+    expect(dueDividends({ dividends: base, transactions, fx, today: new Date('2026-11-04T12:00:00Z') })).toHaveLength(1);
+  });
+});
+
+describe('expectedDividend', () => {
+  const { expectedDividend } = require('../income');
+  const events = [{ date: '2025-05-26', amount: 4.2 }, { date: '2026-05-26', amount: 4.5 }];
+  const sharesAt = (key) => (key >= '2026-01-01' ? 10 : 6);
+
+  it('PEA : parts détenues la veille du détachement, net = brut', () => {
+    const r = expectedDividend({ events, date: '2026-06-02', sharesAt, account: 'PEA', symbol: 'TEP.PA' });
+    expect(r).toEqual({ exDate: '2026-05-26', perShare: 4.5, shares: 10, gross: 45, net: 45 });
+  });
+
+  it('compte-titres, société française : net après 31,4 % en 2026', () => {
+    expect(expectedDividend({ events, date: '2026-06-02', sharesAt, account: 'CTO', symbol: 'TEP.PA' }).net).toBeCloseTo(30.87, 2);
+    // Société étrangère : la retenue du pays n'est pas connue.
+    expect(expectedDividend({ events, date: '2026-06-02', sharesAt, account: 'CTO', symbol: 'AAPL' }).net).toBeNull();
+  });
+
+  it('rien sans détachement récent ni parts', () => {
+    expect(expectedDividend({ events, date: '2026-11-05', sharesAt, account: 'PEA', symbol: 'TEP.PA' })).toBeNull();
+    expect(expectedDividend({ events, date: '2026-06-02', sharesAt: () => 0, account: 'PEA', symbol: 'TEP.PA' })).toBeNull();
+  });
+});

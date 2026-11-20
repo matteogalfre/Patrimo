@@ -4,6 +4,8 @@
  * cran, et reste utilisable au lecteur d'écran (augmenter / diminuer).
  *
  * Un glissement vertical ne le déclenche pas : la page reste défilable.
+ * `limit` pose une butée sous `max` : l'échelle reste la même, mais le
+ * curseur ne va pas plus loin (une part qui ne peut pas dépasser le reste).
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,13 +18,14 @@ import { useTheme } from '../theme/theme';
 
 const THUMB = 26;
 
-const Slider = ({ value, min = 0, max = 100, step = 1, onChange, color, accessibilityLabel, formatValue }) => {
+const Slider = ({ value, min = 0, max = 100, limit, step = 1, onChange, color, accessibilityLabel, formatValue }) => {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const x = useSharedValue(0);
   const dragging = useSharedValue(0);
   const last = useRef(value);
   const accent = color || theme.colors.primary;
+  const upper = Math.min(max, limit ?? max);
 
   const ratioOf = (v) => (max > min ? (v - min) / (max - min) : 0);
 
@@ -31,7 +34,7 @@ const Slider = ({ value, min = 0, max = 100, step = 1, onChange, color, accessib
     last.current = value;
     if (width > 0 && !dragging.value) x.value = withTiming(ratioOf(value) * width, { duration: 120 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, width]);
+  }, [value, width, min, max, upper]);
 
   const emit = useCallback((v) => {
     if (v === last.current) return;
@@ -44,12 +47,13 @@ const Slider = ({ value, min = 0, max = 100, step = 1, onChange, color, accessib
     'worklet';
     const ratio = width > 0 ? Math.min(1, Math.max(0, px / width)) : 0;
     const raw = min + ratio * (max - min);
-    return Math.min(max, Math.max(min, Math.round(raw / step) * step));
+    return Math.min(upper, Math.max(min, Math.round(raw / step) * step));
   };
 
   const move = (px) => {
     'worklet';
-    const clamped = Math.min(width, Math.max(0, px));
+    const stop = max > min ? ((upper - min) / (max - min)) * width : width;
+    const clamped = Math.min(stop, Math.max(0, px));
     x.value = clamped;
     runOnJS(emit)(snap(clamped));
   };
@@ -90,7 +94,7 @@ const Slider = ({ value, min = 0, max = 100, step = 1, onChange, color, accessib
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={(e) => {
           const next = e.nativeEvent.actionName === 'increment' ? value + step : value - step;
-          emit(Math.min(max, Math.max(min, next)));
+          emit(Math.min(upper, Math.max(min, next)));
         }}
       >
         <View style={[styles.track, { backgroundColor: theme.colors.backgroundSecondary }]}>

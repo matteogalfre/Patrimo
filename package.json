@@ -1,6 +1,7 @@
 {
   "name": "patrimo",
   "version": "1.0.0",
+  "license": "GPL-3.0-or-later",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
@@ -40,6 +41,7 @@
     "expo-secure-store": "~57.0.3",
     "expo-sharing": "~57.0.18",
     "expo-status-bar": "~57.0.1",
+    "expo-web-browser": "~57.0.3",
     "i18n-js": "^4.5.1",
     "react": "19.2.3",
     "react-native": "0.86.3",

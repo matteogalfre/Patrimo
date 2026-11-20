@@ -1,6 +1,6 @@
 /**
- * Carte « Planifier » : un accès court à chaque outil, plutôt qu'une carte
- * par outil empilée sur le tableau de bord.
+ * Carte d'outils (« Analyser », « Planifier ») : un accès court à chaque
+ * outil, plutôt qu'une carte par outil empilée sur le tableau de bord.
  */
 
 import React from 'react';
@@ -9,14 +9,12 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 import { useTheme } from '../../theme/theme';
-import { useSettings } from '../../context/SettingsContext';
 
-const ToolsCard = ({ items, navigation }) => {
+const ToolsCard = ({ title, items, navigation }) => {
   const theme = useTheme();
-  const { t } = useSettings();
   return (
     <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-      <Text style={[styles.title, { color: theme.colors.text }]}>{t('tools.title')}</Text>
+      <Text style={[styles.title, { color: theme.colors.text }]}>{title}</Text>
       {items.map((item, i) => (
         <TouchableOpacity
           key={item.route}

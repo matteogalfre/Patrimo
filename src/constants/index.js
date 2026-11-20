@@ -25,6 +25,11 @@ export const STORAGE_KEYS = {
   HISTORICAL_PRICES_TS: '@patrimo_historical_prices_ts',
   CRASH_LOG: '@patrimo_crash_log',
   INFLATION: '@patrimo_inflation',
+  DEMO_MODE: '@patrimo_demo_mode',
+  BANK_LINKS: '@patrimo_bank_links',
+  LOANS: '@patrimo_loans',
+  PROPERTIES: '@patrimo_properties',
+  BANK_INSTITUTIONS: '@patrimo_bank_institutions',
 };
 
 // Les cours passes ne changent plus : un rafraichissement par jour suffit.

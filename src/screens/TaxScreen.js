@@ -15,8 +15,10 @@ import { useSettings } from '../context/SettingsContext';
 import { ResultModal } from '../components';
 import SegmentedControl from '../components/SegmentedControl';
 import { computeCryptoTax, computeCtoTax, taxYears, CRYPTO_EXEMPTION_THRESHOLD } from '../core/tax';
+import { flatTaxOrScale, grossFromNetDividend, PFU_INCOME_TAX, socialRate } from '../core/taxRates';
+import { usePlanning } from '../context/PlanningContext';
 import { buildTaxCsv, shareTaxCsv } from '../services/taxExport';
-import { formatDate, formatQuantity } from '../utils/formatters';
+import { formatDate, formatQuantity, formatPercent } from '../utils/formatters';
 
 const TaxScreen = ({ navigation }) => {
   const theme = useTheme();
@@ -38,6 +40,15 @@ const TaxScreen = ({ navigation }) => {
     [transactions, fx, getPriceAtDate, year],
   );
   const peaStats = totals.byAccount?.PEA;
+
+  // Flat tax ou barème : avec ta tranche d'impôt (questionnaire). Les
+  // dividendes sont saisis nets : on les ramène en brut.
+  const { profile } = usePlanning();
+  const tmiAnswer = profile?.answers?.tax;
+  const tmi = tmiAnswer != null && tmiAnswer !== 'unknown' ? Number(tmiAnswer) : null;
+  const grossDividends = cto.dividends > 0 ? grossFromNetDividend(cto.dividends, year) : 0;
+  const option = flatTaxOrScale({ gains: cto.net, dividends: grossDividends, tmi, year });
+  const hasCtoIncome = cto.net > 0 || cto.dividends > 0;
 
   const colorOf = (v) => (v >= 0 ? theme.colors.success : theme.colors.error);
   const cardStyle = [styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }];
@@ -143,6 +154,33 @@ const TaxScreen = ({ navigation }) => {
           )}
         </View>
 
+        {/* Flat tax ou barème */}
+        {hasCtoIncome && (
+          <View style={cardStyle}>
+            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('tax.option.title')}</Text>
+            {option ? (
+              <>
+                {line(t('tax.option.pfu', { rate: formatPercent(PFU_INCOME_TAX, { showSign: false, decimals: 1 }) }), formatAmount(option.pfu, { decimals: 0 }), option.better === 'pfu' ? theme.colors.success : null)}
+                {line(t('tax.option.scale', { tmi }), formatAmount(option.scale, { decimals: 0 }), option.better === 'scale' ? theme.colors.success : null)}
+                {line(t('tax.option.social', { rate: formatPercent(socialRate(year), { showSign: false, decimals: 1 }) }), formatAmount(option.social, { decimals: 0 }))}
+                <Text style={[styles.optionVerdict, { color: theme.colors.text }]}>
+                  {option.better === 'scale' && option.saving >= 1
+                    ? t('tax.option.chooseScale', { amount: formatAmount(option.saving, { decimals: 0 }) })
+                    : t('tax.option.choosePfu')}
+                </Text>
+                <Text style={[styles.note, { color: theme.colors.textTertiary }]}>{t('tax.option.note')}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.empty, { color: theme.colors.textTertiary }]}>{t('tax.option.noTmi')}</Text>
+                <TouchableOpacity onPress={() => navigation.navigate('Profile')} accessibilityRole="button" style={styles.optionLink}>
+                  <Text style={[styles.optionLinkText, { color: theme.colors.primary }]}>{t('tax.option.openProfile')}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+
         {/* Crypto */}
         <View style={cardStyle}>
           <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('tax.crypto.title')}</Text>
@@ -212,6 +250,9 @@ const TaxScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  optionVerdict: { fontSize: 14, lineHeight: 20, fontWeight: '600', marginTop: 12 },
+  optionLink: { minHeight: 40, justifyContent: 'center' },
+  optionLinkText: { fontSize: 14, fontWeight: '600' },
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, gap: 4 },
   back: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },

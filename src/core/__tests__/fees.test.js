@@ -45,10 +45,12 @@ describe('frais', () => {
 });
 
 describe('TER connus', () => {
-  test('ESE : fourchette 0,12–0,14 %, calcul au milieu, le TER saisi passe devant', () => {
-    expect(terInfo('stock:ESE.PA')).toEqual({ value: 0.13, min: 0.12, max: 0.14, source: 'known' });
+  test('ESE : 0,14 % connu, le TER saisi passe devant', () => {
+    expect(terInfo('stock:ESE.PA')).toEqual({ value: 0.14, min: 0.14, max: 0.14, source: 'known' });
     expect(terInfo('stock:ESE.PA', { 'stock:ESE.PA': 0.15 })).toMatchObject({ value: 0.15, source: 'manual' });
     expect(terInfo('stock:MC.PA')).toBeNull();
-    expect(effectiveTers({ 'stock:CW8.PA': 0.38 })).toEqual({ 'stock:ESE.PA': 0.13, 'stock:CW8.PA': 0.38 });
+    // Les TER connus, complétés et remplacés par ceux saisis.
+    const ters = effectiveTers({ 'stock:CW8.PA': 0.3, 'stock:XYZ.PA': 0.5 });
+    expect(ters).toMatchObject({ 'stock:ESE.PA': 0.14, 'stock:CW8.PA': 0.3, 'stock:XYZ.PA': 0.5 });
   });
 });

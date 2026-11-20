@@ -73,7 +73,13 @@ export const ETF_INDEX = {
   'PCEU.PA': 'europe', 'MEUD.PA': 'europe', 'IMEU.AS': 'europe', 'SMEA.L': 'europe',
   'CAC.PA': 'france', 'C40.PA': 'france',
   'C50.PA': 'es50', 'MSE.PA': 'es50', 'SXRT.DE': 'es50', 'CSX5.AS': 'es50',
-  'SSAC.L': 'acwi', 'IUSQ.DE': 'acwi',
+  'SSAC.L': 'acwi', 'IUSQ.DE': 'acwi', 'SSAC.AS': 'acwi', 'VWCE.DE': 'acwi', 'VWCE.AS': 'acwi', 'VWRL.AS': 'acwi', 'VWRL.L': 'acwi',
+  'ACWE.PA': 'acwi', 'GPEA.PA': 'acwi',
+  'VUSA.DE': 'sp500', 'EQQQ.PA': 'ndx', 'EQQQ.DE': 'ndx', 'XNAS.DE': 'ndx', 'LYMS.DE': 'ndx',
+  'EMIM.AS': 'em', 'IEMA.AS': 'em', 'SEMA.L': 'em', 'EUNM.DE': 'em', 'XMME.DE': 'em',
+  'IMAE.AS': 'europe', 'EUNK.DE': 'europe', 'XMEU.DE': 'europe', 'ETZ.PA': 'europe',
+  'CACC.PA': 'france', 'IS3U.DE': 'france', 'ISFR.L': 'france', 'DX2G.DE': 'france',
+  'EXW1.DE': 'es50', 'XESC.DE': 'es50', 'CSX5.L': 'es50',
 };
 
 /** Indice deviné d'après le nom de l'ETF, dans cet ordre. */

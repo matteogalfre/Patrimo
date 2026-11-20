@@ -25,7 +25,7 @@ import { useTheme } from '../theme/theme';
 import { usePortfolio } from '../context/PortfolioContext';
 import { useSettings } from '../context/SettingsContext';
 import { CryptoCardSkeleton, PortfolioHeaderSkeleton } from '../components';
-import { AssetRow, CashRow, AccountFilter } from '../components/Portfolio';
+import { AssetRow, CashRow, AccountFilter, AccountInstitution } from '../components/Portfolio';
 import ChangeBadge from '../components/ChangeBadge';
 import { ErrorBanner } from '../components/NetworkStatus';
 import { ACCOUNTS } from '../core/assets';
@@ -161,9 +161,12 @@ const PortfolioScreen = ({ navigation }) => {
           <>
             {summary && (
               <View style={styles.summary}>
-                <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>
-                  {account ? t(`accounts.${account}`) : t('portfolio.totalValue')}
-                </Text>
+                <View style={styles.summaryHead}>
+                  <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>
+                    {account ? t(`accounts.${account}`) : t('portfolio.totalValue')}
+                  </Text>
+                  {account && <AccountInstitution account={account} />}
+                </View>
                 <Text style={[styles.summaryValue, { color: theme.colors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                   {formatAmount(summary.value, { decimals: 0 })}
                 </Text>
@@ -271,6 +274,7 @@ const PortfolioScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  summaryHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   container: { flex: 1 },
   content: { paddingBottom: 32 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 8, paddingTop: 4, paddingBottom: 4 },

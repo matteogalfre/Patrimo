@@ -127,3 +127,23 @@ export const yearlyPerformance = ({ transactions = [], dividends = [], fx, value
   }
   return out;
 };
+
+/**
+ * Ce qu'a rapporté un achat précis depuis son jour : la quantité achetée
+ * au cours d'aujourd'hui, face à ce qu'elle a coûté (frais compris), le tout
+ * dans la devise de référence (le change compte, comme pour une position).
+ * @param {{quantity: number, unitPrice: number, fees?: number, currency: string, date: any}} tx
+ * @param {{price: number, currency: string, fx: {now: Function, at: Function}}} market
+ * @returns {{gain: number, pct: number, value: number, cost: number}|null}
+ */
+export const sincePurchase = (tx, { price, currency, fx }) => {
+  const qty = Number(tx?.quantity);
+  const unit = Number(tx?.unitPrice);
+  if (!(qty > 0) || !(unit > 0) || !(price > 0) || !fx) return null;
+  const rateThen = fx.at(tx.currency, tx.date);
+  const rateNow = fx.now(currency);
+  if (!(rateThen > 0) || !(rateNow > 0)) return null;
+  const cost = (qty * unit + Math.abs(Number(tx.fees) || 0)) * rateThen;
+  const value = qty * price * rateNow;
+  return { gain: value - cost, pct: ((value - cost) / cost) * 100, value, cost };
+};

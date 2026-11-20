@@ -1,92 +1,87 @@
-# Patrimo
+<div align="center">
+  <img src="docs/icon.svg" width="140" height="140" alt="Patrimo icon">
+  <h1>Patrimo</h1>
+  <p>Your whole net worth in one place. No account, no cloud: everything stays on your phone.</p>
 
-Suivre tout son patrimoine financier au même endroit : actions et ETF (PEA, compte-titres), cryptos, livrets et comptes. Sans compte, sans cloud. Tout reste sur le téléphone.
+  <img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-b5560f?style=flat-square">
+  <img alt="Android" src="https://img.shields.io/badge/platform-Android-b5560f?style=flat-square">
+  <img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-b5560f?style=flat-square">
+  <img alt="6 languages" src="https://img.shields.io/badge/languages-6-b5560f?style=flat-square">
 
-Patrimo réunit CryptoTrackr et StockTrackr dans une seule app, pensée d'abord pour les investisseurs français.
+  <p><a href="README.fr.md">Lire en français</a></p>
+</div>
 
-## Ce que fait l'app
+## Features
 
-- **Patrimoine total** dans ta devise (euro par défaut), variation du jour, plus-value totale et rendement.
-- **Filtre par enveloppe** : tout, PEA, compte-titres, crypto, liquidités.
-- **Liquidités** : Livret A, LDDS, LEP, comptes, assurance-vie. On saisit un solde de temps en temps, pas chaque virement ; l'historique des soldes alimente le graphique. Livret A, LDDS et LEP prennent d'office le taux officiel du moment ; pour les autres comptes, un taux facultatif donne une estimation des intérêts. Chaque compte se compare à l'inflation : ce qu'il fait gagner ou perdre en pouvoir d'achat par an.
-- **Mode discret** : un appui sur l'œil masque tous les montants (widget compris) et laisse les pourcentages.
-- **D'où vient la performance** : évolution des cours, effet de change, plus-values réalisées, dividendes. La somme se recoupe à l'écran.
-- **Suivi du PEA** : versements face au plafond de 150 000 €, date des 5 ans.
-- **Fiche par actif** : historique des cours avec tes achats et ventes, position par enveloppe, toutes les opérations modifiables, et rendement moyen par an de l'actif (de 1 à 30 ans selon l'historique, année par année). Pour un ETF reconnu, la moyenne de son indice sur plusieurs décennies (S&P 500 dividendes réinvestis depuis 1988, MSCI World depuis 1972, Nasdaq-100, CAC 40…).
-- **Saisie d'opération** : recherche unique actions, ETF et cryptos (par nom, ticker ou ISIN, avec toutes les places de cotation), prix de clôture du jour pré-rempli mais modifiable, frais, prix en devise de cotation ou en euros, dividendes.
-- **Sauvegarde** en fichier, à réimporter sur un nouveau téléphone (réimporter le même fichier ne crée pas de doublon). Elle peut être protégée par un mot de passe (chiffrement AES-256 ; sans le mot de passe, le fichier est illisible).
-- **Courbe à explorer au doigt** : valeur et date au point touché, ligne « argent investi » en pointillés, périodes de 7 jours à tout l'historique.
-- **Revenus passifs** : dividendes par mois et par année, rendement sur prix de revient, projection sur 12 mois avec les intérêts des livrets, et calendrier des dividendes à venir (chaque versement des 12 derniers mois revient à la même période, ajusté à la quantité détenue aujourd'hui).
-- **Diversification** : les actions et ETF par pays et par secteur. Un ETF est décomposé selon l'indice qu'il suit (MSCI World, S&P 500, Nasdaq-100, émergents, Europe, CAC 40, Euro Stoxx 50, ACWI) ; une action compte pour son pays et son secteur. Ce qui n'est pas reconnu se corrige sur la fiche de l'actif.
-- **Patrimoine futur** : épargne mensuelle, horizon de 10 à 30 ans, trois rendements moyens.
-- **Rendement annualisé et performance par année** : le rendement de ton argent, versements pris en compte, avant et après inflation, et le gain de chaque année civile face à l'inflation de l'année.
-- **Objectifs** : un montant à une date, la progression et ce qu'il faudrait épargner par mois. Plus l'épargne de précaution, en mois de dépenses couverts.
-- **Rééquilibrage** : une répartition cible entre actions, crypto et liquidités, et comment répartir le prochain versement pour s'en rapprocher sans rien vendre.
-- **Achats programmés** : un montant chaque mois sur un actif, avec un rappel le jour venu et l'opération pré-remplie. L'app ne passe aucun ordre.
-- **Frais** : TER des ETF (saisi sur la fiche) et courtage réellement payé, en euros par an, en part du patrimoine et en manque à gagner sur 20 ans. Les ETF sans TER et les ordres où les frais dépassent 1 % du montant sont signalés.
-- **Fiscalité** : plus-values du compte-titres (formulaire 2074) et des cryptos (formule du 2086), situation du PEA, export CSV. Une aide au calcul, à comparer avec l'IFU du courtier.
-- Alertes de cours, widget Android, code PIN et biométrie, 6 langues.
+- [x] Stocks, ETFs, crypto, savings accounts, life insurance, employee savings, loans and real estate, all in one net worth
+- [x] Built for French investors first: PEA and its €150,000 cap, French savings accounts (Livret A, LDDS, LEP…), tax help for forms 2074 and 2086
+- [x] Real performance: price moves, currency effect, realized gains and dividends, annualized return (IRR) before and after inflation
+- [x] Compare your deposits with an index (MSCI World, S&P 500, Nasdaq-100, CAC 40) or a Livret A, at the same dates
+- [x] Dividends: calendar, yield on cost, 12-month projection, and reminders for the ones you haven't logged yet
+- [x] Diversification by country and sector, with ETFs broken down by the index they track
+- [x] Budget as a Sankey diagram, savings rate, goals, emergency fund and financial independence
+- [x] Loans, real estate and a purchase simulator (notary fees, monthly payment, 35% debt ratio)
+- [x] Optional bank sync through GoCardless, with your own free keys
+- [x] Price alerts, home screen widget, PIN and biometric lock, privacy mode that hides every amount
+- [x] Backup to a file, and demo data to try the app without entering yours
+- [x] 6 languages: English, French, Spanish, Portuguese, German, Italian
+- [x] Free, no ads, no account, no tracking, entirely open source
 
-## Comment les chiffres sont calculés
+## Download
 
-Tout le calcul est dans `src/core/`, en fonctions pures et testées.
+[<img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="60">](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/matteogalfre/Patrimo)
+[<img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png" alt="Get it on GitHub" height="60">](https://github.com/matteogalfre/Patrimo/releases/latest)
 
-- Une position, c'est un actif dans une enveloppe : le même ETF en PEA et en compte-titres a deux prix de revient.
-- Prix de revient au coût moyen pondéré, frais d'achat compris (la méthode du fisc pour les titres). Les frais de vente réduisent le produit de cession.
-- Chaque opération est convertie au taux de change de son jour, la valeur actuelle au taux du jour. L'écart est l'effet de change.
-- Les positions soldées restent dans les totaux : leur plus-value réalisée fait partie de la performance.
-- Un prix d'opération manquant (vieil import, réseau absent) est complété avec la clôture du jour depuis l'historique. En attendant, la ligne est valorisée au cours actuel et signalée.
-- Sans cours connu à une date passée (titre radié, historique absent), un actif compte au prix de sa dernière opération, pas à zéro.
-- Le rendement annualisé est un taux de rendement interne (chaque versement compte à sa date). La performance d'une année rapporte son gain au capital moyen investi pendant l'année.
-- Le rendement après inflation convertit chaque versement en euros d'aujourd'hui avec l'indice des prix du mois, puis recalcule le même taux.
+Obtainium keeps the app up to date straight from this repository's releases.
 
-## Sources de données
+## Bank sync (optional)
 
-- Actions, ETF, fonds : Yahoo Finance (cours dans la devise de cotation, pence londoniens ramenés en livres).
-- Cryptos : API publique Binance (paires USDT, traitées comme du dollar).
-- Taux de change : taux de référence de la BCE via Frankfurter, Yahoo en secours pour les devises hors BCE.
-- Inflation : indice des prix à la consommation harmonisé de la France, publié chaque mois par Eurostat (gardé en cache une semaine).
-- Taux du Livret A, du LDDS et du LEP : table intégrée à l'app d'après les arrêtés du Journal officiel, à mettre à jour au 1er février et au 1er août. La Banque de France publie ces séries, mais son API demande une clé personnelle.
-- Recherche par ISIN : OpenFIGI liste les places de cotation d'un titre, seulement quand on tape un ISIN.
-- Diversification : répartitions des indices relevées sur les fiches iShares (BlackRock) au 30 octobre 2026 et intégrées à l'app (aucune requête), dans `src/constants/exposureData.js`. Secteurs des actions courantes selon la classification GICS.
-- Logos : CoinCap pour les cryptos, Financial Modeling Prep pour les actions. Quand un logo manque, l'app affiche les initiales.
+Patrimo can refresh the balance of your current and savings accounts on its own, through [GoCardless Bank Account Data](https://gocardless.com/bank-account-data/) (PSD2, read-only: account names and balances, never your transactions or credentials).
 
-Aucune clé d'API. Ce sont les seules requêtes réseau de l'app : ces services voient quels symboles ou ISIN sont demandés, jamais les montants.
+1. Create a free account on the GoCardless Bank Account Data portal, then Developers › User secrets › Create new.
+2. In Patrimo, open Settings › Linked banks and paste the Secret ID and Secret Key.
+3. Pick your bank and give your consent on your bank's own site. Patrimo never sees your login.
 
-## Lancer le projet
+Your keys stay in the phone's secure storage and never go into backups. Patrimo talks to GoCardless directly, there is no Patrimo server in between. Consent lasts 90 to 180 days depending on the bank, then renews in two taps. Brokers are not covered.
+
+## Where the numbers come from
+
+- Stocks, ETFs and funds: Yahoo Finance
+- Crypto: Binance public API
+- Exchange rates: European Central Bank reference rates via [Frankfurter](https://frankfurter.dev)
+- Inflation: Eurostat's harmonised consumer price index for France
+- ISIN search: [OpenFIGI](https://www.openfigi.com)
+- Fear & Greed index: alternative.me
+- Logos: CoinCap for crypto, Financial Modeling Prep for stocks, and Google's public favicon service for banks and brokers
+
+None of them needs an account or a key, and they only see which symbols are asked for, never your amounts. How each figure is calculated (cost basis, currency effect, IRR, inflation) is explained in the [French README](README.fr.md#comment-les-chiffres-sont-calculés).
+
+## Run it locally
 
 ```bash
 npm install
-npx expo start
+npx expo start      # then press "a" for Android
+npm run verify      # lint, tests and import checks
 ```
 
-Vérifications (lint, tests, imports) :
+## Feedback and contributions
 
-```bash
-npm run verify
-```
+***All contributions are very welcome!***
 
-Build Android :
+- Bug reports and feature requests go [here](https://github.com/matteogalfre/Patrimo/issues). The forms tell you what to include.
+- A broker's fees, a savings rate or an ETF's breakdown is out of date? These live in [`src/constants/`](src/constants/): open an issue or a pull request with the source.
+- Developers: fork the project and open a pull request.
 
-```bash
-eas build --platform android --profile preview
-```
+## Translation
 
-## Organisation du code
+Patrimo speaks English, French, Spanish, Portuguese, German and Italian. Found a clumsy sentence, or want your language? Each language is one file in [`src/i18n/translations/`](src/i18n/translations/): copy `en.js`, translate it and open a pull request.
 
-```
-src/
-├── core/        moteur de calcul, change, import des sauvegardes (testés)
-├── services/    cours (Yahoo, Binance), change, stockage local
-├── context/     état de l'app : patrimoine, réglages, alertes
-├── screens/     tableau de bord, portefeuille, fiche actif, saisie, réglages, simulateur
-├── components/  cartes, graphiques, recherche d'actif, sélecteur de date
-├── i18n/        traductions (fr, en, es, de, it, pt)
-└── widget/      widget Android
-```
+## Privacy
 
-## Pas encore là
+Patrimo has no server and no account. Your data lives on your phone, and only leaves it when you export a backup yourself. The app only fetches public market data and logos, plus your balances from GoCardless if you turn bank sync on.
 
-- Objectifs (montant cible à une date) et épargne de précaution.
-- Diversification géographique et sectorielle des ETF.
-- Version iOS publiée.
+## License
+
+Patrimo is licensed under the [GNU General Public License v3](LICENSE): you can use, study, change and share it, as long as your version stays open too.
+
+Patrimo is a tracking tool, not financial or tax advice.

@@ -2,7 +2,8 @@
  * Champ de date (sans heure : un cours de clôture par jour suffit).
  * Android : boîte de dialogue native. iOS : sélecteur dans une feuille avec
  * Annuler / Valider, pour pouvoir revenir en arrière sans rien changer.
- * Pas de date future, sauf `allowFuture` (échéance d'un objectif).
+ * Pas de date future, sauf `allowFuture` (échéance d'un objectif) ou
+ * `anyDate` (n'importe quelle date).
  */
 
 import React, { useCallback, useState } from 'react';
@@ -26,7 +27,7 @@ const clampToToday = (d) => {
   return d > now ? now : d;
 };
 
-const DateField = ({ value, onChange, label, allowFuture = false }) => {
+const DateField = ({ value, onChange, label, allowFuture = false, anyDate = false }) => {
   const theme = useTheme();
   const { t, locale } = useSettings();
   const [open, setOpen] = useState(false);
@@ -38,9 +39,10 @@ const DateField = ({ value, onChange, label, allowFuture = false }) => {
     setOpen(true);
   }, [value]);
 
-  const clamp = useCallback((d) => (allowFuture ? d : clampToToday(d)), [allowFuture]);
-  const maximumDate = allowFuture ? undefined : new Date();
-  const minimumDate = allowFuture ? new Date() : undefined;
+  // anyDate : passé comme futur (première échéance d'un crédit, date d'achat d'un bien).
+  const clamp = useCallback((d) => (allowFuture || anyDate ? d : clampToToday(d)), [allowFuture, anyDate]);
+  const maximumDate = allowFuture || anyDate ? undefined : new Date();
+  const minimumDate = allowFuture && !anyDate ? new Date() : undefined;
 
   const onAndroidChange = useCallback((event, selected) => {
     setOpen(false);

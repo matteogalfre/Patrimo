@@ -37,20 +37,21 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 /**
  * Effectue une requête avec retry automatique
  * @param {string} url - URL de la requête
- * @param {object} options - Options fetch
+ * @param {object} options - Options fetch ; `timeoutMs` raccourcit le délai d'attente
  * @param {number} maxRetries - Nombre max de tentatives
  * @returns {Promise<any>} - Données JSON
  */
 export async function fetchWithRetry(url, options = {}, maxRetries = LIMITS.API_MAX_RETRIES) {
   let lastError = null;
+  const { timeoutMs = LIMITS.API_TIMEOUT, ...fetchOptions } = options;
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), LIMITS.API_TIMEOUT);
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const response = await fetch(url, {
-        ...options,
+        ...fetchOptions,
         signal: controller.signal,
       });
 

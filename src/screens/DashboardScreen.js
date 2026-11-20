@@ -6,7 +6,7 @@
  * inclut les liquidités.
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,11 @@ import { ACCOUNT_COLORS, CLASS_COLORS, OTHERS_COLOR, paletteColor } from '../uti
 import { usePortfolio } from '../context/PortfolioContext';
 import { useSettings } from '../context/SettingsContext';
 import { usePlanning } from '../context/PlanningContext';
+import { useBank } from '../context/BankContext';
+import { useMarketWatch } from '../hooks/useMarketWatch';
+import { scoreProfile } from '../core/profile';
+import { findInstitution } from '../core/institutions';
+import { budgetTotals } from '../core/budget';
 import { MetricCardSkeleton, ChartSkeleton } from '../components';
 import AllocationChart from '../components/AllocationChart';
 import AssetLogo from '../components/AssetLogo';
@@ -35,6 +40,7 @@ import SegmentedControl from '../components/SegmentedControl';
 import PeaCard from '../components/PeaCard';
 import ToolsCard from '../components/Dashboard/ToolsCard';
 import DuePlansCard from '../components/Dashboard/DuePlansCard';
+import DueDividendsCard from '../components/Dashboard/DueDividendsCard';
 import YearlyPerformanceCard from '../components/Dashboard/YearlyPerformanceCard';
 import { annualizedReturn } from '../core/performance';
 import { averageCashRate } from '../core/projection';
@@ -74,6 +80,9 @@ const DashboardScreen = ({ navigation }) => {
     transactions,
     dividends,
     fx,
+    demo,
+    debts,
+    realEstate,
   } = usePortfolio();
   const { isOffline } = useNetworkStatus();
 
@@ -125,14 +134,21 @@ const DashboardScreen = ({ navigation }) => {
         }))
         .filter((s) => s.value > 0);
     }
+    // Deux comptes du même nom (« Compte courant » chez deux banques) : on précise la banque.
+    const sameName = (a) => cash.accounts.filter((x) => x.name === a.name).length > 1;
+    const cashItem = (a) => ({
+      key: a.id,
+      name: sameName(a) && a.institution ? `${a.name} · ${findInstitution(a.institution)?.name || a.institution}` : a.name,
+      value: a.value,
+    });
     let items;
-    if (isCash) items = cash.accounts.map((a) => ({ name: a.name, value: a.value }));
+    if (isCash) items = cash.accounts.map(cashItem);
     else if (account) {
       items = positions.filter((p) => p.account === account && p.isHeld).map((p) => ({ name: p.symbol, value: p.value }));
     } else {
       items = [
         ...assets.filter((a) => a.isHeld).map((a) => ({ name: a.symbol, value: a.value })),
-        ...cash.accounts.map((a) => ({ name: a.name, value: a.value })),
+        ...cash.accounts.map(cashItem),
       ];
     }
     items.sort((a, b) => b.value - a.value);
@@ -179,7 +195,7 @@ const DashboardScreen = ({ navigation }) => {
   }, [isCash, account, totals, transactions, dividends, fx, inflation]);
 
   // Résumé de la diversification pour l'accès « Planifier » : premier pays, premier secteur.
-  const { exposure: exposureOverrides } = usePlanning();
+  const { exposure: exposureOverrides, profile, budget, hydrated, onboarded, setOnboarded } = usePlanning();
   const diversificationSummary = useMemo(() => {
     const e = computeExposure(assets.filter((a) => a.isHeld), exposureOverrides);
     const country = e.countries.find((x) => x.key !== 'OTHER');
@@ -191,7 +207,19 @@ const DashboardScreen = ({ navigation }) => {
     });
   }, [assets, exposureOverrides, t]);
 
-  const tools = useMemo(() => [
+  // Deux cartes : ce qui analyse le patrimoine actuel, ce qui prépare la suite.
+  // Marchés : une carte quand le S&P 500 ou le Bitcoin reculent nettement,
+  // et le plan anti-panique vérifié à l'ouverture.
+  const marketStates = useMarketWatch();
+  const marketAlerts = Object.entries(marketStates)
+    // Une chute récente (la séance ou la semaine), pas une baisse installée depuis des mois.
+    .filter(([mid, m]) => (mid === 'btc'
+      ? m.state.change1d <= -0.05 || m.state.change5d <= -0.1
+      : m.state.change1d <= -0.02 || m.state.change5d <= -0.04))
+    .map(([mid, m]) => ({ id: mid, ...m }));
+
+  const analyzeTools = useMemo(() => [
+    { route: 'Markets', icon: 'pulse-outline', title: t('markets.title'), subtitle: t('markets.entrySubtitle') },
     {
       route: 'PassiveIncome',
       icon: 'cash-outline',
@@ -200,24 +228,47 @@ const DashboardScreen = ({ navigation }) => {
         ? t('income.nextShort', { name: income.upcoming.items[0].name, month: t('months.long')[new Date(income.upcoming.items[0].date).getMonth()] })
         : income.projected > 0 ? t('income.summary', { amount: formatAmount(income.projected, { decimals: 0 }) }) : null,
     },
+    { route: 'Diversification', icon: 'globe-outline', title: t('diversification.title'), subtitle: diversificationSummary },
+    { route: 'Fees', icon: 'receipt-outline', title: t('fees.title'), subtitle: t('fees.entrySubtitle') },
+    { route: 'Benchmark', icon: 'git-compare-outline', title: t('benchmark.title'), subtitle: t('benchmark.entrySubtitle') },
+    { route: 'Tax', icon: 'document-text-outline', title: t('tax.title'), subtitle: t('tax.entrySubtitle') },
+  ], [t, income.projected, income.upcoming, formatAmount, diversificationSummary]);
+
+  const planTools = useMemo(() => [
+    {
+      route: 'Profile',
+      icon: 'compass-outline',
+      title: t('profile.title'),
+      subtitle: profile ? t('profile.entryDone', { name: t(`profile.names.${scoreProfile(profile.answers).profile}`) }) : t('profile.entrySubtitle'),
+    },
+    {
+      route: 'Budget',
+      icon: 'git-network-outline',
+      title: t('budget.title'),
+      subtitle: budget
+        ? t('budget.entryRate', { rate: formatPercent(budgetTotals(budget).savingsRate, { showSign: false, decimals: 0 }) })
+        : t('budget.entrySubtitle'),
+    },
     { route: 'Projection', icon: 'trending-up', title: t('projection.title'), subtitle: t('projection.entrySubtitle') },
+    { route: 'Independence', icon: 'sunny-outline', title: t('independence.title'), subtitle: t('independence.entrySubtitle') },
     { route: 'Goals', icon: 'flag-outline', title: t('goals.title'), subtitle: t('goals.entrySubtitle') },
     { route: 'Rebalance', icon: 'pie-chart-outline', title: t('rebalance.title'), subtitle: t('rebalance.entrySubtitle') },
     { route: 'Plans', icon: 'repeat-outline', title: t('plans.title'), subtitle: t('plans.entrySubtitle') },
-    { route: 'Diversification', icon: 'globe-outline', title: t('diversification.title'), subtitle: diversificationSummary },
-    { route: 'Fees', icon: 'receipt-outline', title: t('fees.title'), subtitle: t('fees.entrySubtitle') },
-    { route: 'Tax', icon: 'document-text-outline', title: t('tax.title'), subtitle: t('tax.entrySubtitle') },
-  ], [t, income.projected, income.upcoming, formatAmount, diversificationSummary]);
+    { route: 'Wealth', icon: 'home-outline', title: t('wealth.title'), subtitle: t('wealth.entrySubtitle') },
+    { route: 'HomeBuy', icon: 'calculator-outline', title: t('homeBuy.title'), subtitle: t('homeBuy.entrySubtitle') },
+  ], [t, profile, budget]);
 
   const missingSymbols = useMemo(
     () => warnings.missingQuotes.map((id) => id.split(':')[1]).join(', '),
     [warnings.missingQuotes],
   );
 
+  // Tirer pour rafraîchir relit aussi les banques reliées (quota de 6 h respecté).
+  const { syncAll: syncBanks } = useBank();
   const onRefresh = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await refresh();
-  }, [refresh]);
+    await Promise.all([refresh(), syncBanks().catch(() => null)]);
+  }, [refresh, syncBanks]);
 
   const openAsset = useCallback((item) => {
     Haptics.selectionAsync();
@@ -228,6 +279,14 @@ const DashboardScreen = ({ navigation }) => {
     Haptics.selectionAsync();
     navigation.navigate('CashAccount', acc ? { accountId: acc.id } : {});
   }, [navigation]);
+
+  // Première ouverture, rien de saisi : l'accueil et le questionnaire, une
+  // seule fois. Quelqu'un qui a déjà des données ne le voit jamais.
+  useEffect(() => {
+    if (!hydrated || isLoading || onboarded) return;
+    if (transactions.length || cash.accounts.length || profile || demo) setOnboarded();
+    else navigation.navigate('Profile', { onboarding: true });
+  }, [hydrated, isLoading, onboarded, transactions.length, cash.accounts.length, profile, demo, setOnboarded, navigation]);
 
   if (isLoading) {
     return (
@@ -291,6 +350,17 @@ const DashboardScreen = ({ navigation }) => {
         {error && <ErrorBanner message={error} onRetry={onRefresh} t={t} />}
         <SyncStatus isSyncing={isRefreshing} lastUpdated={lastUpdated} t={t} language={language} />
 
+        {demo && (
+          <TouchableOpacity
+            style={[styles.notice, { backgroundColor: theme.colors.primaryMuted }]}
+            onPress={() => navigation.navigate('Settings')}
+            accessibilityRole="button"
+          >
+            <Ionicons name="flask-outline" size={16} color={theme.colors.primary} />
+            <Text style={[styles.noticeText, { color: theme.colors.text }]}>{t('demo.banner')}</Text>
+          </TouchableOpacity>
+        )}
+
         {warnings.missingQuotes.length > 0 && (
           <View style={[styles.notice, { backgroundColor: theme.colors.warningBg }]} accessibilityRole="alert">
             <Ionicons name="alert-circle-outline" size={16} color={theme.colors.warning} />
@@ -308,7 +378,9 @@ const DashboardScreen = ({ navigation }) => {
           </View>
         )}
 
-        <DuePlansCard navigation={navigation} />
+        {/* Les plans sont les tiens : rien à rappeler sur l'exemple. */}
+        {!demo && <DuePlansCard navigation={navigation} />}
+        <DueDividendsCard navigation={navigation} />
 
         <AccountFilter value={account} onChange={setAccount} available={availableAccounts} style={styles.filter} />
 
@@ -548,7 +620,61 @@ const DashboardScreen = ({ navigation }) => {
         )}
 
         {!isCash && <YearlyPerformanceCard account={account} />}
-        {!account && hasAnything && <ToolsCard items={tools} navigation={navigation} />}
+        {/* Planifier sert dès le premier jour (profil, budget) ; Analyser, une fois des placements saisis. */}
+        {/* Les marchés reculent : ce que dit l'histoire, ce que ça représente pour toi */}
+        {!account && marketAlerts.length > 0 && (
+          <TouchableOpacity
+            style={[styles.netCard, { backgroundColor: theme.colors.warningBg, borderColor: theme.colors.warning }]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              navigation.navigate('Markets', { market: marketAlerts[0].id });
+            }}
+            accessibilityRole="button"
+          >
+            <View style={styles.netHead}>
+              <Text style={[styles.netLabel, { color: theme.colors.text }]}>{t('markets.alertTitle')}</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
+            </View>
+            {marketAlerts.map((m) => (
+              <Text key={m.id} style={[styles.marketLine, { color: theme.colors.text }]}>
+                {t(m.partialHigh ? 'markets.alertLineYear' : 'markets.alertLine', {
+                  market: t(`markets.names.${m.id}`),
+                  day: formatPercent(m.state.change1d * 100, { decimals: 1 }),
+                  high: formatPercent(m.state.drawdown * 100, { decimals: 1 }),
+                })}
+              </Text>
+            ))}
+            <Text style={[styles.netSub, { color: theme.colors.textSecondary }]}>{t('markets.alertSub')}</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Patrimoine net : dès qu'un bien ou un crédit est saisi */}
+        {!account && (debts.items.length > 0 || realEstate.items.length > 0) && (
+          <TouchableOpacity
+            style={[styles.netCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              navigation.navigate('Wealth');
+            }}
+            accessibilityRole="button"
+          >
+            <View style={styles.netHead}>
+              <Text style={[styles.netLabel, { color: theme.colors.textSecondary }]}>{t('wealth.netWorth')}</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
+            </View>
+            <Text style={[styles.netValue, { color: theme.colors.text }]}>{formatAmount(overview.netWorth, { decimals: 0 })}</Text>
+            <Text style={[styles.netSub, { color: theme.colors.textTertiary }]}>
+              {t('wealth.dashboardLine', {
+                financial: formatAmount(overview.value, { decimals: 0, compact: true }),
+                realEstate: formatAmount(realEstate.value, { decimals: 0, compact: true }),
+                debts: formatAmount(debts.remaining, { decimals: 0, compact: true }),
+              })}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {!account && <ToolsCard title={t('tools.plan')} items={planTools} navigation={navigation} />}
+        {!account && hasAnything && <ToolsCard title={t('tools.analyze')} items={analyzeTools} navigation={navigation} />}
 
         {!hasAnything && (
           <TouchableOpacity
@@ -566,6 +692,12 @@ const DashboardScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  netCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
+  netHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  netLabel: { fontSize: 13, fontWeight: '600' },
+  netValue: { fontSize: 24, fontWeight: '800', marginTop: 4, fontVariant: ['tabular-nums'] },
+  netSub: { fontSize: 12, marginTop: 4 },
+  marketLine: { fontSize: 14, fontWeight: '600', marginTop: 6 },
   container: { flex: 1 },
   scrollContent: { paddingBottom: 32 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 20, paddingRight: 8, paddingTop: 4, paddingBottom: 4 },

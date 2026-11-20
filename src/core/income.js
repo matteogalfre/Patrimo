@@ -8,6 +8,8 @@
  */
 
 import { ASSET_TYPES } from './assets';
+import { netFrenchDividend } from './taxRates';
+import { formatDateKey } from '../utils/formatters';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -141,4 +143,77 @@ export const computeIncome = ({ dividends = [], transactions = null, fx, positio
     projectedInterest: cashYearlyInterest,
     projected: projectedDividends + cashYearlyInterest,
   };
+};
+
+/**
+ * Dividendes probablement reçus mais pas encore saisis. Règle : un titre
+ * encore détenu qui a versé un dividende il y a environ un an en reverse un à
+ * la même période ; si la date anniversaire est passée (depuis moins de
+ * 4 mois) et qu'aucun dividende de ce titre n'est saisi autour de cette
+ * date, on le propose, montant ajusté à la quantité détenue. La fenêtre de
+ * 4 mois rattrape aussi un oubli de l'été sans ressortir les vieux versements.
+ *
+ * @param {{dividends: object[], transactions: object[], today?: Date, dismissed?: string[]}} params
+ * @returns {Array<{key: string, assetId: string, symbol: string, name: string, account: string, date: string, amount: number, currency: string}>}
+ */
+export const dueDividends = ({ dividends = [], transactions = [], today = new Date(), dismissed = [] }) => {
+  const now = today.getTime();
+  const MATCH = 45 * DAY;
+  const out = [];
+  dividends.forEach((d) => {
+    if (!d.assetId) return;
+    const next = new Date(d.date);
+    next.setFullYear(next.getFullYear() + 1);
+    const due = next.getTime();
+    if (due > now || now - due > 120 * DAY) return;
+    const key = `${d.assetId}:${monthKey(next)}`;
+    if (dismissed.includes(key) || out.some((x) => x.key === key)) return;
+    const already = dividends.some((x) => x.assetId === d.assetId && Math.abs(new Date(x.date).getTime() - due) <= MATCH);
+    if (already) return;
+    const current = quantityAt(transactions, d.assetId, d.account, now);
+    if (current <= DUST) return;
+    const then = quantityAt(transactions, d.assetId, d.account, new Date(d.date).getTime());
+    const ratio = then > DUST ? current / then : 1;
+    out.push({
+      key,
+      assetId: d.assetId,
+      symbol: d.symbol,
+      name: d.name || d.symbol,
+      account: d.account,
+      date: next.toISOString(),
+      amount: Math.round(d.amount * ratio * 100) / 100,
+      currency: d.currency,
+    });
+  });
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1));
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Le dividende attendu pour un versement saisi à une date : le dernier
+ * détachement des 120 jours précédents, multiplié par les parts détenues la
+ * veille (il faut les avoir avant le détachement). Sur un PEA, le net est le
+ * brut ; sur un compte-titres, pour une société française, la banque retient
+ * l'acompte d'impôt et les prélèvements sociaux. Ailleurs, la retenue du
+ * pays d'origine n'est pas connue : seul le brut est donné.
+ * @param {{events: Array<{date: string, amount: number}>, date: any, sharesAt: (dateKey: string) => number, account: string, symbol: string}} params
+ * @returns {{exDate: string, perShare: number, shares: number, gross: number, net: number|null}|null}
+ */
+export const expectedDividend = ({ events = [], date, sharesAt, account, symbol }) => {
+  const day = formatDateKey(date);
+  const limit = new Date(`${day}T12:00:00`).getTime() - 120 * DAY_MS;
+  const event = [...events]
+    .filter((e) => e.date <= day && new Date(`${e.date}T12:00:00`).getTime() >= limit)
+    .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  if (!event) return null;
+  const before = formatDateKey(new Date(new Date(`${event.date}T12:00:00`).getTime() - DAY_MS));
+  const shares = Number(sharesAt(before)) || 0;
+  if (!(shares > 0)) return null;
+  const gross = Math.round(shares * event.amount * 100) / 100;
+  const year = new Date(`${day}T12:00:00`).getFullYear();
+  let net = null;
+  if (account === 'PEA') net = gross;
+  else if (/\.PA$/i.test(symbol || '')) net = Math.round(netFrenchDividend(gross, year) * 100) / 100;
+  return { exDate: event.date, perShare: event.amount, shares, gross, net };
 };

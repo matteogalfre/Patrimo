@@ -4,7 +4,7 @@
  * pré-remplit l'opération à valider après l'achat chez le courtier.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -27,6 +27,8 @@ import AssetLogo from '../components/AssetLogo';
 import Toggle from '../components/Toggle';
 import AssetSearchModal from '../components/Transaction/AssetSearchModal';
 import { accountsForType } from '../core/assets';
+import { budgetPlanSuggestions } from '../core/plans';
+import AccountInstitution from '../components/Portfolio/AccountInstitution';
 
 const parseNum = (s) => {
   const n = Number(String(s ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
@@ -35,17 +37,19 @@ const parseNum = (s) => {
 
 const EMPTY_FORM = { id: null, asset: null, account: null, amount: '', day: 5 };
 
-const PlansScreen = ({ navigation }) => {
+const PlansScreen = ({ navigation, route }) => {
   const theme = useTheme();
   const { t, formatAmount, currencySymbol } = useSettings();
-  const { assets } = usePortfolio();
-  const { plans, addPlan, updatePlan, removePlan, reminders, setReminders } = usePlanning();
+  const { assets, transactions } = usePortfolio();
+  const { plans, addPlan, updatePlan, removePlan, reminders, setReminders, accountInstitutions, budget } = usePlanning();
 
   const [form, setForm] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [error, setError] = useState(null);
 
   const monthlyTotal = plans.filter((p) => p.active).reduce((s, p) => s + p.amount, 0);
+  // Les investissements du budget pas encore programmés, en un toucher.
+  const fromBudget = budgetPlanSuggestions({ budget, plans, assets, transactions });
   const cardStyle = [styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }];
   const accountOptions = form?.asset ? accountsForType(form.asset.assetType) : [];
 
@@ -69,8 +73,22 @@ const PlansScreen = ({ navigation }) => {
     setSearchOpen(false);
     const options = accountsForType(a.assetType);
     const held = assets.find((x) => x.assetId === a.assetId && x.isHeld)?.accounts?.find((acc) => options.includes(acc));
-    setForm((f) => ({ ...f, asset: a, account: held || options[0] }));
+    // Sinon une de tes enveloppes : établissement indiqué ou déjà des opérations.
+    const used = new Set(transactions.map((x) => x.account));
+    const owned = options.find((acc) => accountInstitutions?.[acc] || used.has(acc));
+    setForm((f) => ({ ...f, asset: a, account: held || owned || options[0] }));
   };
+
+  // Ouvert depuis un autre écran (Marchés…) : le formulaire arrive pré-rempli.
+  const prefill = route?.params?.prefill;
+  useEffect(() => {
+    if (!prefill) return;
+    setError(null);
+    setForm({ ...EMPTY_FORM, amount: prefill.amount ? String(prefill.amount) : '' });
+    if (prefill.asset) pickAsset(prefill.asset);
+    else setSearchOpen(true);
+    navigation.setParams?.({ prefill: undefined });
+  }, [prefill]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
     const amount = parseNum(form.amount);
@@ -135,6 +153,41 @@ const PlansScreen = ({ navigation }) => {
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={[styles.intro, { color: theme.colors.textSecondary }]}>{t('plans.intro')}</Text>
+
+          {fromBudget.length > 0 && !form && (
+            <View style={cardStyle}>
+              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('plans.fromBudgetTitle')}</Text>
+              <Text style={[styles.small, { color: theme.colors.textSecondary }]}>{t('plans.fromBudgetSub')}</Text>
+              {fromBudget.map((line) => (
+                <View key={line.id} style={styles.budgetRow}>
+                  {line.asset
+                    ? <AssetLogo assetId={line.asset.assetId} symbol={line.asset.symbol} size={30} />
+                    : <View style={[styles.budgetDot, { backgroundColor: theme.colors.backgroundSecondary }]}><Ionicons name="search" size={14} color={theme.colors.textTertiary} /></View>}
+                  <View style={styles.flex}>
+                    <Text style={[styles.rowTitle, { color: theme.colors.text }]} numberOfLines={1}>
+                      {line.label} · {t('plans.perMonth', { amount: formatAmount(line.amount, { decimals: 0, reveal: true }) })}
+                    </Text>
+                    <Text style={[styles.small, { color: theme.colors.textTertiary }]} numberOfLines={1}>
+                      {line.asset ? line.asset.name || line.asset.symbol : t('plans.fromBudgetPick')}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setError(null);
+                      setForm({ ...EMPTY_FORM, amount: String(line.amount) });
+                      if (line.asset) pickAsset({ assetId: line.asset.assetId, assetType: line.asset.assetType, symbol: line.asset.symbol, name: line.asset.name });
+                      else setSearchOpen(true);
+                    }}
+                    style={[styles.budgetBtn, { borderColor: theme.colors.primary }]}
+                    accessibilityRole="button"
+                  >
+                    <Text style={[styles.budgetBtnText, { color: theme.colors.primary }]}>{t('plans.fromBudgetAdd')}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
 
           {plans.length > 0 && (
             <View style={cardStyle}>
@@ -211,7 +264,10 @@ const PlansScreen = ({ navigation }) => {
                           accessibilityRole="button"
                           accessibilityState={{ selected: on }}
                         >
-                          <Text style={[styles.chipText, { color: on ? theme.colors.primary : theme.colors.text }]}>{t(`accounts.${acc}`)}</Text>
+                          <View style={styles.accountChip}>
+                            <Text style={[styles.chipText, { color: on ? theme.colors.primary : theme.colors.text }]}>{t(`accounts.${acc}`)}</Text>
+                            <AccountInstitution account={acc} size={16} showName={false} />
+                          </View>
                         </TouchableOpacity>
                       );
                     })}
@@ -292,6 +348,11 @@ const PlansScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  budgetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  budgetDot: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  budgetBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, minHeight: 36, justifyContent: 'center' },
+  budgetBtnText: { fontSize: 13, fontWeight: '700' },
+  accountChip: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   container: { flex: 1 },
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, gap: 4 },
@@ -311,7 +372,7 @@ const styles = StyleSheet.create({
   assetName: { flex: 1, fontSize: 15, fontWeight: '600' },
   input: { flex: 1, fontSize: 17, fontWeight: '600', paddingHorizontal: 14, paddingVertical: 12 },
   suffix: { fontSize: 13, fontWeight: '600' },
-  chips: { flexDirection: 'row', gap: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 8 },
   chipText: { fontSize: 14, fontWeight: '600' },
   dayRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

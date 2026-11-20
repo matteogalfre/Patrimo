@@ -1,4 +1,4 @@
-import { annualizedReturn, xirr, yearlyPerformance } from '../performance';
+import { sincePurchase, annualizedReturn, xirr, yearlyPerformance } from '../performance';
 import { createFxConverter } from '../fx';
 
 const fx = createFxConverter({ base: 'EUR', latest: {}, history: {} });
@@ -48,5 +48,28 @@ describe('performance par année', () => {
     expect(years[1].gain).toBeCloseTo(320);
     expect(years[1].pct).toBeGreaterThan(20);
     expect(years[1].pct).toBeLessThan(30);
+  });
+});
+
+
+describe('sincePurchase', () => {
+  const fx = { now: (c) => (c === 'USD' ? 0.9 : 1), at: (c) => (c === 'USD' ? 0.8 : 1) };
+
+  it('gain et pourcentage, frais compris', () => {
+    const r = sincePurchase({ quantity: 10, unitPrice: 100, fees: 2, currency: 'EUR', date: '2025-01-02' }, { price: 120, currency: 'EUR', fx });
+    expect(r.cost).toBe(1002);
+    expect(r.gain).toBeCloseTo(198, 6);
+    expect(r.pct).toBeCloseTo(19.76, 2);
+  });
+
+  it('le change compte : action en dollars', () => {
+    const r = sincePurchase({ quantity: 1, unitPrice: 100, currency: 'USD', date: '2025-01-02' }, { price: 100, currency: 'USD', fx });
+    expect(r.gain).toBeCloseTo(10, 6); // même cours, dollar plus fort
+    expect(r.pct).toBeCloseTo(12.5, 6);
+  });
+
+  it('rien sans prix', () => {
+    expect(sincePurchase({ quantity: 1, unitPrice: null, currency: 'EUR' }, { price: 10, currency: 'EUR', fx })).toBeNull();
+    expect(sincePurchase({ quantity: 1, unitPrice: 5, currency: 'EUR' }, { price: 0, currency: 'EUR', fx })).toBeNull();
   });
 });

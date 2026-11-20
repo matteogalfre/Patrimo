@@ -243,14 +243,15 @@ const ThemeContext = createContext(undefined);
 
 const STORAGE_KEY = STORAGE_KEYS.THEME_PREFERENCE;
 const VALID_PREFERENCES = ['auto', 'light', 'dark'];
-const DEFAULT_PREFERENCE = 'light';
+// Par défaut, l'app suit le thème du téléphone.
+const DEFAULT_PREFERENCE = 'auto';
 
 const resolveEffectiveMode = (preference, systemScheme) => {
   if (preference === 'light' || preference === 'dark') return preference;
   // `auto` : on suit le système. `useColorScheme` peut renvoyer `null` avant
   // la première mesure : on retombe alors sur le thème clair.
   if (systemScheme === 'light' || systemScheme === 'dark') return systemScheme;
-  return DEFAULT_PREFERENCE;
+  return 'light';
 };
 
 export const ThemeProvider = ({ children }) => {
@@ -258,7 +259,7 @@ export const ThemeProvider = ({ children }) => {
   const [themePreference, setThemePreferenceState] = useState(DEFAULT_PREFERENCE);
 
   // Préférence enregistrée chargée au montage, sans bloquer le premier rendu :
-  // au pire une image en thème clair avant de basculer en sombre.
+  // au pire une image au thème du système avant de basculer sur le choix fait.
   useEffect(() => {
     let cancelled = false;
     AsyncStorage.getItem(STORAGE_KEY)

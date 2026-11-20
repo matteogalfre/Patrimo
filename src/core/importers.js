@@ -14,6 +14,8 @@ import {
   normalizeSymbol,
 } from './assets';
 import { normalizeCashAccount } from './cash';
+import { normalizeLoan } from './loans';
+import { normalizeProperty } from './realEstate';
 
 export const BACKUP_APP_NAME = 'Patrimo';
 export const BACKUP_FORMAT_VERSION = 1;
@@ -101,15 +103,23 @@ export const parseBackup = (json) => {
   const tx = json.data.transactions || [];
   const dv = json.data.dividends || [];
   const cash = json.data.cashAccounts || [];
+  // Crédits et biens : absents des sauvegardes plus anciennes.
+  const ln = Array.isArray(json.data.loans) ? json.data.loans : [];
+  const pr = Array.isArray(json.data.properties) ? json.data.properties : [];
   const transactions = tx.map(normalizeTransaction).filter(Boolean);
   const dividends = dv.map(normalizeDividend).filter(Boolean);
   const cashAccounts = cash.map(normalizeCashAccount).filter(Boolean);
+  const loans = ln.map(normalizeLoan).filter(Boolean);
+  const properties = pr.map(normalizeProperty).filter(Boolean);
   return {
     format,
     transactions,
     dividends,
     cashAccounts,
-    skipped: tx.length + dv.length + cash.length - transactions.length - dividends.length - cashAccounts.length,
+    loans,
+    properties,
+    skipped: tx.length + dv.length + cash.length + ln.length + pr.length
+      - transactions.length - dividends.length - cashAccounts.length - loans.length - properties.length,
   };
 };
 
@@ -121,10 +131,10 @@ export const mergeById = (existing, incoming) => {
 };
 
 /** Contenu d'une sauvegarde Patrimo. */
-export const buildBackup = ({ transactions, dividends, cashAccounts = [], settings = {}, appVersion }) => ({
+export const buildBackup = ({ transactions, dividends, cashAccounts = [], loans = [], properties = [], settings = {}, appVersion }) => ({
   appName: BACKUP_APP_NAME,
   formatVersion: BACKUP_FORMAT_VERSION,
   version: appVersion,
   exportDate: new Date().toISOString(),
-  data: { transactions, dividends, cashAccounts, settings },
+  data: { transactions, dividends, cashAccounts, loans, properties, settings },
 });

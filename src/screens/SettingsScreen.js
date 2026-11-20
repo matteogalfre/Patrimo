@@ -19,7 +19,7 @@ import { useSettings } from '../context/SettingsContext';
 import { usePlanning } from '../context/PlanningContext';
 import { backupService } from '../services/storage';
 import { getCrashLog, clearCrashLog } from '../services/crashLog';
-import { ConfirmModal, InputSheet, ResultModal } from '../components';
+import { ConfirmModal, InputSheet, OptionSheet, ResultModal } from '../components';
 import Toggle from '../components/Toggle';
 import DateField from '../components/Transaction/DateField';
 import PinLockScreen from '../components/PinLockScreen';
@@ -31,11 +31,17 @@ import {
   ImportModal,
 } from '../components/Settings/SettingsModals';
 import { getLocaleTag } from '../i18n';
+import { formatDate, formatPercent } from '../utils/formatters';
+import AssetLogo from '../components/AssetLogo';
+import { institutionById, searchInstitutions } from '../core/institutions';
+import { normalizeRule, tariffOf, tariffsFor, tariffById } from '../core/brokerFees';
+import { tariffLabel } from '../constants/brokerTariffs';
 import { isBiometricAvailable, authenticateBiometric } from '../utils/biometric';
 
 const SettingsScreen = ({ navigation, route }) => {
   const theme = useTheme();
-  const { totals, transactions, dividends, pea, reload } = usePortfolio();
+  const { totals, transactions, dividends, pea, reload, demo, setDemo } = usePortfolio();
+  const [demoBusy, setDemoBusy] = useState(false);
   const hasData = transactions.length + dividends.length > 0;
 
   const {
@@ -49,6 +55,7 @@ const SettingsScreen = ({ navigation, route }) => {
     supportedCurrencies,
     setCurrency,
     formatAmount,
+    locale,
     settings,
     setPeaSettings,
     privacyMode,
@@ -65,10 +72,21 @@ const SettingsScreen = ({ navigation, route }) => {
     getBackupPassword,
     backupSettings,
     applyImported,
+    brokerRules,
+    setBrokerRule,
+    ttf,
+    setTtf,
+    accountInstitutions,
+    setAccountInstitution,
   } = usePlanning();
 
   const [isExporting, setIsExporting] = useState(false);
   const [passwordSheet, setPasswordSheet] = useState(false);
+  // Frais de courtage : enveloppe dont on choisit la règle, puis saisie d'un pourcentage ou d'un montant.
+  const [brokerPick, setBrokerPick] = useState(null);
+  const [brokerInput, setBrokerInput] = useState(null); // { account, type }
+  // Établissement d'une enveloppe (PEA chez Bourse Direct…).
+  const [institutionPick, setInstitutionPick] = useState(null);
   // Sauvegarde protégée en attente de son mot de passe : { envelope, mode }.
   const [pendingImport, setPendingImport] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -184,7 +202,7 @@ const SettingsScreen = ({ navigation, route }) => {
         setResultModal({
           visible: true,
           success: false,
-          message: result.error || t('errors.generic'),
+          message: result.error === 'DEMO_MODE' ? t('demo.blocked') : result.error || t('errors.generic'),
         });
       }
     } catch (error) {
@@ -230,6 +248,10 @@ const SettingsScreen = ({ navigation, route }) => {
     try {
       const result = await backupService.importData({ mode });
       if (result.cancelled) return;
+      if (result.error === 'DEMO_MODE') {
+        setResultModal({ visible: true, success: false, message: t('demo.blocked') });
+        return;
+      }
       if (result.needsPassword) {
         setPendingImport({ envelope: result.envelope, mode });
         return;
@@ -240,7 +262,19 @@ const SettingsScreen = ({ navigation, route }) => {
     } finally {
       setIsImporting(false);
     }
-  }, [finishImport]);
+  }, [finishImport, t]);
+
+  const toggleDemo = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDemoBusy(true);
+    try {
+      await setDemo(!demo);
+    } catch (error) {
+      setResultModal({ visible: true, success: false, message: error.message });
+    } finally {
+      setDemoBusy(false);
+    }
+  }, [demo, setDemo]);
 
   // Mot de passe saisi pour une sauvegarde protégée.
   const unlockImport = useCallback(async ({ password }) => {
@@ -261,6 +295,70 @@ const SettingsScreen = ({ navigation, route }) => {
     }
     return null;
   }, [pendingImport, finishImport, t]);
+
+  // Barème lisible : « 0,99 à 3,80 € jusqu'à 4 400 €, puis 0,09 % », « 1 € par ordre »…
+  const money = (v, code = 'EUR') => {
+    try {
+      return new Intl.NumberFormat(locale, { style: 'currency', currency: code, minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 }).format(v);
+    } catch {
+      return `${v} ${code}`;
+    }
+  };
+  const pctText = (v) => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 3 }).format(v / 100);
+  const scheduleText = (sched, code) => {
+    if (!sched) return '';
+    const parts = [];
+    if (sched.tiers?.length) {
+      const first = sched.tiers[0];
+      const last = sched.tiers[sched.tiers.length - 1];
+      parts.push(sched.tiers.length > 1
+        ? t('broker.sched.tiers', { from: money(first.fee, code), to: money(last.fee, code), limit: money(last.upTo, code) })
+        : t('broker.sched.tier', { fee: money(first.fee, code), limit: money(last.upTo, code) }));
+      parts.push(t('broker.sched.then', { pct: sched.pct ? pctText(sched.pct) : t('broker.sched.free') }));
+    } else if (sched.fee && sched.pct) {
+      parts.push(t('broker.sched.feePct', { fee: money(sched.fee, code), pct: pctText(sched.pct) }));
+    } else if (sched.pct) {
+      parts.push(t('broker.sched.pct', { pct: pctText(sched.pct) }));
+    } else {
+      parts.push(sched.fee ? t('broker.sched.fee', { fee: money(sched.fee, code) }) : t('broker.sched.free'));
+    }
+    if (sched.min) parts.push(t('broker.sched.min', { min: money(sched.min, code) }));
+    if (sched.max != null) parts.push(t('broker.sched.max', { max: money(sched.max, code) }));
+    return parts.join(', ');
+  };
+  const tariffText = (tariff) => {
+    const mapText = (map) => Object.entries(map).map(([code, sched]) => {
+      const text = scheduleText(sched, code === '*' ? 'EUR' : code);
+      return code === '*' ? text : t(`broker.market.${code}`, { text });
+    }).join(', ');
+    const lines = [mapText(tariff.markets)];
+    if (tariff.funds) lines.push(t('broker.forItem', { name: 'ETF', text: mapText(tariff.funds) }));
+    // Les titres au même barème sur une ligne : « BTC, USDC, USDT : 0,99 % du montant ».
+    const bySchedule = new Map();
+    Object.entries(tariff.symbols || {}).forEach(([symbol, map]) => {
+      const text = mapText(map);
+      bySchedule.set(text, [...(bySchedule.get(text) || []), symbol]);
+    });
+    bySchedule.forEach((symbols, text) => lines.push(t('broker.forItem', { name: symbols.join(', '), text })));
+    if (tariff.plan) lines.push(t('broker.sched.plan', { text: scheduleText(tariff.plan, 'EUR') }));
+    lines.push(t('broker.asOf', { date: formatDate(tariff.asOf, { locale }) }));
+    return lines.join('\n');
+  };
+
+  const brokerRuleText = (stored) => {
+    const rule = normalizeRule(stored);
+    if (!rule || rule.type === 'none') return t('broker.rules.none');
+    const tariff = tariffOf(rule);
+    if (tariff) return tariffLabel(tariff);
+    if (rule.type === 'percent') {
+      return t('broker.percentValue', {
+        pct: formatPercent(rule.pct, { showSign: false, decimals: 2 }),
+        min: formatAmount(rule.min || 0, { decimals: 2, reveal: true }),
+      });
+    }
+    if (rule.type === 'fixed') return t('broker.fixedValue', { amount: formatAmount(rule.amount || 0, { decimals: 2, reveal: true }) });
+    return t(`broker.rules.${rule.type}`);
+  };
 
   const togglePassword = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -817,6 +915,102 @@ const SettingsScreen = ({ navigation, route }) => {
           </View>
         </Animated.View>
 
+        {/* Mes enveloppes : chez qui */}
+        <Animated.View entering={FadeIn.delay(255).duration(400)} style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+            {t('envelopes.section')}
+          </Text>
+          <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            {['PEA', 'CTO', 'CRYPTO'].map((acc, i) => {
+              const inst = institutionById(accountInstitutions[acc]);
+              return (
+                <React.Fragment key={acc}>
+                  {i > 0 && <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />}
+                  <TouchableOpacity
+                    style={styles.settingRow}
+                    onPress={() => setInstitutionPick(acc)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(`accounts.${acc}`)}
+                  >
+                    <View style={styles.settingLeft}>
+                      {inst ? (
+                        <AssetLogo institution={inst} size={40} />
+                      ) : (
+                        <View style={[styles.settingIcon, { backgroundColor: theme.colors.primaryMuted }]}>
+                          <Ionicons name="business-outline" size={18} color={theme.colors.primary} />
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.settingTitle, { color: theme.colors.text }]}>{t(`accounts.${acc}`)}</Text>
+                        <Text style={[styles.settingSubtitle, { color: theme.colors.textSecondary }]}>{inst ? inst.name : t('envelopes.none')}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })}
+            <Text style={[styles.fieldHint, { color: theme.colors.textTertiary }]}>{t('envelopes.hint')}</Text>
+          </View>
+        </Animated.View>
+
+        {/* Frais de courtage */}
+        <Animated.View entering={FadeIn.delay(260).duration(400)} style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
+            {t('broker.section')}
+          </Text>
+          <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <View style={[styles.infoBox, { backgroundColor: theme.colors.primaryMuted }]}>
+              <Ionicons name="information-circle" size={20} color={theme.colors.primary} />
+              <Text style={[styles.infoText, { color: theme.colors.text }]}>{t('broker.info')}</Text>
+            </View>
+            {['PEA', 'CTO', 'CRYPTO'].map((acc, i) => (
+              <React.Fragment key={acc}>
+                {i > 0 && <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />}
+                <TouchableOpacity
+                  style={styles.settingRow}
+                  onPress={() => setBrokerPick(acc)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(`accounts.${acc}`)}
+                >
+                  <View style={styles.settingLeft}>
+                    <View style={[styles.settingIcon, { backgroundColor: theme.colors.primaryMuted }]}>
+                      <Ionicons name="pricetag-outline" size={18} color={theme.colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.settingTitle, { color: theme.colors.text }]}>{t(`accounts.${acc}`)}</Text>
+                      <Text style={[styles.settingSubtitle, { color: theme.colors.textSecondary }]}>{brokerRuleText(brokerRules[acc])}</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+                </TouchableOpacity>
+              </React.Fragment>
+            ))}
+            <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setTtf(!ttf);
+              }}
+              accessibilityRole="switch"
+              accessibilityLabel={t('broker.ttfTitle')}
+              accessibilityState={{ checked: ttf }}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIcon, { backgroundColor: theme.colors.primaryMuted }]}>
+                  <Ionicons name="flag-outline" size={18} color={theme.colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingTitle, { color: theme.colors.text }]}>{t('broker.ttfTitle')}</Text>
+                  <Text style={[styles.settingSubtitle, { color: theme.colors.textSecondary }]}>{t('broker.ttfSub')}</Text>
+                </View>
+              </View>
+              <Toggle value={ttf} />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
         {/* Tools Section */}
         <Animated.View entering={FadeIn.delay(275).duration(400)} style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
@@ -850,7 +1044,15 @@ const SettingsScreen = ({ navigation, route }) => {
             </TouchableOpacity>
 
             {[
+              { route: 'BankConnections', icon: 'link-outline', key: 'banks' },
+              { route: 'Markets', icon: 'pulse-outline', key: 'markets' },
+              { route: 'Wealth', icon: 'home-outline', key: 'wealth' },
+              { route: 'HomeBuy', icon: 'calculator-outline', key: 'homeBuy' },
+              { route: 'Profile', icon: 'compass-outline', key: 'profile' },
+              { route: 'Budget', icon: 'git-network-outline', key: 'budget' },
               { route: 'Goals', icon: 'flag-outline', key: 'goals' },
+              { route: 'Independence', icon: 'sunny-outline', key: 'independence' },
+              { route: 'Benchmark', icon: 'git-compare-outline', key: 'benchmark' },
               { route: 'Rebalance', icon: 'pie-chart-outline', key: 'rebalance' },
               { route: 'Plans', icon: 'repeat-outline', key: 'plans' },
               { route: 'Fees', icon: 'receipt-outline', key: 'fees' },
@@ -902,6 +1104,32 @@ const SettingsScreen = ({ navigation, route }) => {
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        {/* Données d'exemple */}
+        <Animated.View entering={FadeIn.delay(280).duration(400)} style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>{t('demo.section')}</Text>
+          <View style={[styles.card, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={toggleDemo}
+              disabled={demoBusy}
+              accessibilityRole="switch"
+              accessibilityLabel={t('demo.title')}
+              accessibilityState={{ checked: demo, busy: demoBusy }}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIcon, { backgroundColor: theme.colors.primaryMuted }]}>
+                  <Ionicons name="flask-outline" size={18} color={theme.colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingTitle, { color: theme.colors.text }]}>{t('demo.title')}</Text>
+                  <Text style={[styles.settingSubtitle, { color: theme.colors.textSecondary }]}>{t('demo.sub')}</Text>
+                </View>
+              </View>
+              {demoBusy ? <ActivityIndicator color={theme.colors.primary} size="small" /> : <Toggle value={demo} />}
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -966,6 +1194,82 @@ const SettingsScreen = ({ navigation, route }) => {
         theme={theme}
         onReplace={() => handleImport('replace')}
         onMerge={() => handleImport('merge')}
+      />
+
+      <OptionSheet
+        visible={!!institutionPick}
+        onClose={() => setInstitutionPick(null)}
+        title={institutionPick ? t('envelopes.pickTitle', { account: t(`accounts.${institutionPick}`) }) : ''}
+        options={[
+          { key: null, label: t('envelopes.none') },
+          // Tout, dans l'ordre utile : courtiers d'abord pour un PEA, plateformes pour la crypto.
+          ...(institutionPick === 'CRYPTO' ? ['crypto', 'neobank', 'broker'] : ['broker', 'bank', 'neobank', 'insurer'])
+            .flatMap((type) => searchInstitutions('', { types: [type], limit: 100 }))
+            .map((i) => ({ key: i.id, label: i.name, left: <AssetLogo institution={i} size={24} /> })),
+        ]}
+        value={institutionPick ? accountInstitutions[institutionPick] || null : null}
+        onSelect={(id) => {
+          setAccountInstitution(institutionPick, id);
+          setInstitutionPick(null);
+        }}
+      />
+
+      <OptionSheet
+        visible={!!brokerPick}
+        onClose={() => setBrokerPick(null)}
+        title={brokerPick ? t('broker.pickTitle', { account: t(`accounts.${brokerPick}`) }) : ''}
+        message={t('broker.pickMessage')}
+        options={brokerPick ? [
+          { key: 'none', label: t('broker.rules.none') },
+          // Les grilles connues, celle de l'établissement de l'enveloppe en tête.
+          ...tariffsFor(brokerPick, accountInstitutions[brokerPick]).map((x) => ({
+            key: `tariff:${x.id}`,
+            label: tariffLabel(x),
+            sub: tariffText(x),
+            left: <AssetLogo institution={institutionById(x.institution)} size={24} />,
+          })),
+          { key: 'percent', label: t('broker.rules.percent') },
+          { key: 'fixed', label: t('broker.rules.fixed') },
+        ] : []}
+        value={brokerPick ? (() => {
+          const rule = normalizeRule(brokerRules[brokerPick]);
+          return rule?.type === 'tariff' ? `tariff:${rule.id}` : rule?.type || 'none';
+        })() : null}
+        onSelect={(key) => {
+          const acc = brokerPick;
+          setBrokerPick(null);
+          if (key.startsWith('tariff:')) setBrokerRule(acc, { type: 'tariff', id: tariffById(key.slice(7)).id });
+          else if (key === 'percent' || key === 'fixed') setBrokerInput({ account: acc, type: key });
+          else setBrokerRule(acc, { type: key });
+        }}
+      />
+
+      <InputSheet
+        visible={!!brokerInput}
+        onClose={() => setBrokerInput(null)}
+        title={brokerInput?.type === 'fixed' ? t('broker.rules.fixed') : t('broker.rules.percent')}
+        fields={brokerInput?.type === 'fixed'
+          ? [{ key: 'amount', label: t('broker.amount'), keyboardType: 'decimal-pad', suffix: currencySymbol }]
+          : [
+            { key: 'pct', label: t('broker.pct'), keyboardType: 'decimal-pad', suffix: '%' },
+            { key: 'min', label: t('broker.min'), keyboardType: 'decimal-pad', suffix: currencySymbol },
+          ]}
+        confirmText={t('common.save')}
+        onSubmit={(v) => {
+          const num = (x) => Number(String(x ?? '').replace(',', '.').trim() || 0);
+          if (brokerInput.type === 'fixed') {
+            const amount = num(v.amount);
+            if (!Number.isFinite(amount) || amount < 0) return t('broker.error');
+            setBrokerRule(brokerInput.account, { type: 'fixed', amount });
+          } else {
+            const pct = num(v.pct);
+            const min = num(v.min);
+            if (!Number.isFinite(pct) || pct < 0 || pct > 5 || !Number.isFinite(min) || min < 0) return t('broker.error');
+            setBrokerRule(brokerInput.account, { type: 'percent', pct, min });
+          }
+          setBrokerInput(null);
+          return null;
+        }}
       />
 
       <InputSheet
