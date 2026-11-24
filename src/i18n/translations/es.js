@@ -1351,7 +1351,7 @@ export default {
     demo: 'Modo ejemplo activo: la conexión bancaria está desactivada. Vuelve a tus datos reales en los ajustes para usarla.',
     keys: {
       title: 'Claves de GoCardless',
-      steps: '1. Abre el portal GoCardless Bank Account Data e inicia sesión.\n2. Developers, luego User secrets, luego Create new: llámala «Patrimo».\n3. Pega aquí el Secret ID y la Secret Key (la clave solo se muestra una vez).',
+      steps: '1. Abre el portal GoCardless Bank Account Data y crea una cuenta gratuita o inicia sesión.\n2. Developers, luego User secrets, luego Create new: llámala «Patrimo».\n3. Pega aquí el Secret ID y la Secret Key (la clave solo se muestra una vez).',
       portal: 'Abrir el portal de GoCardless',
       privacy: 'Las claves se quedan en el almacén seguro del teléfono. No van en las copias de seguridad ni a ningún sitio salvo GoCardless.',
       save: 'Comprobar y guardar',

@@ -1351,7 +1351,7 @@ export default {
     demo: 'Modo exemplo ativo: a ligação bancária está desligada. Volta aos teus dados reais nas definições para a usar.',
     keys: {
       title: 'Chaves GoCardless',
-      steps: '1. Abre o portal GoCardless Bank Account Data e inicia sessão.\n2. Developers, depois User secrets, depois Create new: chama-lhe «Patrimo».\n3. Cola aqui o Secret ID e a Secret Key (a chave só aparece uma vez).',
+      steps: '1. Abre o portal GoCardless Bank Account Data e cria uma conta gratuita ou inicia sessão.\n2. Developers, depois User secrets, depois Create new: chama-lhe «Patrimo».\n3. Cola aqui o Secret ID e a Secret Key (a chave só aparece uma vez).',
       portal: 'Abrir o portal GoCardless',
       privacy: 'As chaves ficam no armazenamento seguro do telemóvel. Não vão para as cópias de segurança nem para lado nenhum além da GoCardless.',
       save: 'Verificar e guardar',

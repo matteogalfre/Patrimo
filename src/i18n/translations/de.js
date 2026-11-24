@@ -1351,7 +1351,7 @@ export default {
     demo: 'Beispielmodus aktiv: Die Bankverbindung ist ausgeschaltet. Wechsle in den Einstellungen zurück zu deinen echten Daten, um sie zu nutzen.',
     keys: {
       title: 'GoCardless-Schlüssel',
-      steps: '1. Öffne das Portal GoCardless Bank Account Data und melde dich an.\n2. Developers, dann User secrets, dann Create new: nenne ihn „Patrimo“.\n3. Füge hier Secret ID und Secret Key ein (der Schlüssel wird nur einmal angezeigt).',
+      steps: '1. Öffne das Portal GoCardless Bank Account Data und erstelle ein kostenloses Konto oder melde dich an.\n2. Developers, dann User secrets, dann Create new: nenne ihn „Patrimo“.\n3. Füge hier Secret ID und Secret Key ein (der Schlüssel wird nur einmal angezeigt).',
       portal: 'GoCardless-Portal öffnen',
       privacy: 'Die Schlüssel bleiben im sicheren Speicher des Telefons. Sie landen nie in Sicherungen und gehen nur an GoCardless.',
       save: 'Prüfen und speichern',

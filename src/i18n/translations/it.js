@@ -1351,7 +1351,7 @@ export default {
     demo: 'Modalità esempio attiva: il collegamento bancario è disattivato. Torna ai tuoi dati reali nelle impostazioni per usarlo.',
     keys: {
       title: 'Chiavi GoCardless',
-      steps: '1. Apri il portale GoCardless Bank Account Data e accedi.\n2. Developers, poi User secrets, poi Create new: chiamala «Patrimo».\n3. Incolla qui il Secret ID e la Secret Key (la chiave viene mostrata una sola volta).',
+      steps: '1. Apri il portale GoCardless Bank Account Data e crea un account gratuito o accedi.\n2. Developers, poi User secrets, poi Create new: chiamala «Patrimo».\n3. Incolla qui il Secret ID e la Secret Key (la chiave viene mostrata una sola volta).',
       portal: 'Apri il portale GoCardless',
       privacy: 'Le chiavi restano nell\'archivio sicuro del telefono. Non finiscono nei backup e vanno solo a GoCardless.',
       save: 'Verifica e salva',

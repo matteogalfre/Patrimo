@@ -1351,7 +1351,7 @@ export default {
     demo: 'Sample mode is on: bank linking is off. Switch back to your real data in settings to use it.',
     keys: {
       title: 'GoCardless keys',
-      steps: '1. Open the GoCardless Bank Account Data portal and sign in.\n2. Developers, then User secrets, then Create new: name it "Patrimo".\n3. Paste the Secret ID and Secret Key here (the key is shown only once).',
+      steps: '1. Open the GoCardless Bank Account Data portal, then create a free account or sign in.\n2. Developers, then User secrets, then Create new: name it "Patrimo".\n3. Paste the Secret ID and Secret Key here (the key is shown only once).',
       portal: 'Open the GoCardless portal',
       privacy: 'The keys stay in the phone\'s secure storage. They are never in backups and only ever go to GoCardless.',
       save: 'Check and save',

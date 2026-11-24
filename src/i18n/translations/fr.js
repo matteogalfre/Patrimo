@@ -1351,7 +1351,7 @@ export default {
     demo: 'Mode exemple actif : la connexion bancaire est coupée. Repasse sur tes vraies données dans les réglages pour l\'utiliser.',
     keys: {
       title: 'Clés GoCardless',
-      steps: '1. Ouvre le portail GoCardless Bank Account Data et connecte-toi.\n2. Developers, puis User secrets, puis Create new : appelle-la « Patrimo ».\n3. Colle ici le Secret ID et la Secret Key (la clé ne s\'affiche qu\'une fois).',
+      steps: '1. Ouvre le portail GoCardless Bank Account Data, puis crée un compte gratuit ou connecte-toi.\n2. Developers, puis User secrets, puis Create new : appelle-la « Patrimo ».\n3. Colle ici le Secret ID et la Secret Key (la clé ne s\'affiche qu\'une fois).',
       portal: 'Ouvrir le portail GoCardless',
       privacy: 'Les clés restent dans le coffre sécurisé du téléphone. Elles ne vont ni dans les sauvegardes, ni ailleurs que chez GoCardless.',
       save: 'Vérifier et enregistrer',
