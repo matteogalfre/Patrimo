@@ -4,6 +4,19 @@ Suivre tout son patrimoine financier au même endroit : actions et ETF (PEA, com
 
 Pensée d'abord pour les investisseurs français. *[Read in English](README.md)*
 
+## Captures
+
+<div align="center">
+  <img src="docs/screenshots/home.jpg" width="30%" alt="Le patrimoine dans le temps">
+  <img src="docs/screenshots/portfolio.jpg" width="30%" alt="Chaque position, par enveloppe">
+  <img src="docs/screenshots/asset.jpg" width="30%" alt="Un actif, avec la plus-value et l'effet de change">
+  <img src="docs/screenshots/diversification.jpg" width="30%" alt="La diversification par pays">
+  <img src="docs/screenshots/benchmark.jpg" width="30%" alt="Tes versements rejoués sur un indice">
+  <img src="docs/screenshots/markets.jpg" width="30%" alt="Les marchés : où on en est">
+</div>
+
+Données d'exemple du mode démo, app en anglais.
+
 ## Ce que fait l'app
 
 - **Patrimoine total** dans ta devise (euro par défaut), variation du jour, plus-value totale et rendement.
@@ -37,7 +50,7 @@ Pensée d'abord pour les investisseurs français. *[Read in English](README.md)*
 - **Achats programmés** : un montant chaque mois sur un actif, avec un rappel le jour venu et l'opération pré-remplie. L'app ne passe aucun ordre.
 - **Frais** : TER des ETF (connu pour une quarantaine d'ETF courants, sinon saisi sur la fiche) et courtage réellement payé, en euros par an et en part du patrimoine. Un verdict face aux repères du marché : chaque ETF face aux grands ETF du même indice, l'économie face à un fonds actif moyen (chiffres AMF), et tes propres ordres repassés à la grille de chaque courtier. Le manque à gagner sur 20 ans n'apparaît que si les frais sont élevés.
 - **Fiscalité** : plus-values du compte-titres (formulaire 2074) et des cryptos (formule du 2086), situation du PEA, export CSV. Une aide au calcul, à comparer avec l'IFU du courtier.
-- **Données d'exemple** : un patrimoine fictif d'environ 5 000 € pour essayer ou montrer l'app ; les vraies données restent à part, intactes.
+- **Données d'exemple** : un patrimoine fictif d'environ 5 000 €, avec un budget, un profil et un objectif fictifs, pour essayer ou montrer l'app sans rien dévoiler. Les vraies données restent à part, intactes, et les banques reliées sont masquées.
 - Alertes de cours, widget Android, code PIN et biométrie, 6 langues.
 
 ## Comment les chiffres sont calculés

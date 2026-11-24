@@ -28,7 +28,7 @@ Patrimo is built around investing in France: the PEA and its cap, the Livret A a
 - [x] Loans, real estate and a purchase simulator (notary fees, monthly payment, 35% debt ratio)
 - [x] Optional bank sync through GoCardless, with your own free keys
 - [x] Price alerts, home screen widget, PIN and biometric lock, privacy mode that hides every amount
-- [x] Backup to a file, and demo data to try the app without entering yours
+- [x] Backup to a file, and a demo mode (made-up portfolio, budget and profile) to try or show the app without revealing anything of yours
 - [x] 6 languages: English, French, Spanish, Portuguese, German, Italian
 - [x] Free, no ads, no account, no tracking, entirely open source
 
@@ -38,6 +38,19 @@ Patrimo is built around investing in France: the PEA and its cap, the Livret A a
 [<img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png" alt="Get it on GitHub" height="60">](https://github.com/matteogalfre/Patrimo/releases/latest)
 
 Obtainium keeps the app up to date straight from this repository's releases.
+
+## Screenshots
+
+<div align="center">
+  <img src="docs/screenshots/home.jpg" width="30%" alt="Net worth over time">
+  <img src="docs/screenshots/portfolio.jpg" width="30%" alt="Every holding, by account">
+  <img src="docs/screenshots/asset.jpg" width="30%" alt="An asset, with your gains and the currency effect">
+  <img src="docs/screenshots/diversification.jpg" width="30%" alt="Diversification by country">
+  <img src="docs/screenshots/benchmark.jpg" width="30%" alt="Your deposits replayed on an index">
+  <img src="docs/screenshots/markets.jpg" width="30%" alt="Markets: where things stand">
+</div>
+
+Sample data from the app's demo mode.
 
 ## Bank sync (optional)
 
