@@ -7,12 +7,16 @@
  * Les dates suivent le jour courant. Les prix d'achat sont les clôtures du
  * jour quand l'historique est fourni ; sinon le prix reste vide et l'app le
  * complète au chargement des cours.
+ *
+ * La planification d'exemple (profil, budget, objectif, achat programmé)
+ * remplace aussi la vraie en mode démo : montrer l'app ne doit rien dévoiler.
  */
 
 import { ASSET_TYPES, makeAssetId } from './assets';
 import { estimateFees } from './brokerFees';
 import { rateAt } from './fx';
 import { formatDateKey } from '../utils/formatters';
+import { budgetTotals, defaultBudget } from './budget';
 
 const S = ASSET_TYPES.STOCK;
 const C = ASSET_TYPES.CRYPTO;
@@ -27,6 +31,7 @@ export const DEMO_ASSETS = [
 ].map((a) => ({ ...a, assetId: makeAssetId(a.assetType, a.symbol) }));
 
 const RULES = { PEA: { type: 'tariff', id: 'boursedirect' }, CTO: { type: 'tariff', id: 'boursedirect' }, CRYPTO: { type: 'tariff', id: 'binance' } };
+const INSTITUTIONS = { PEA: 'boursedirect', CTO: 'boursedirect', CRYPTO: 'binance' };
 
 const monthsAgo = (today, months, day) => new Date(today.getFullYear(), today.getMonth() - months, day, 10);
 
@@ -115,4 +120,69 @@ export const buildDemoData = ({ today = new Date(), series = {} } = {}) => {
   }];
 
   return { transactions, dividends, cashAccounts };
+};
+
+/** Réponses au questionnaire de la personne fictive : la trentaine, salariée, un achat immobilier en vue. */
+export const DEMO_PROFILE = Object.freeze({
+  age: 32,
+  work: 'stable',
+  household: 'couple',
+  income: 2200,
+  expenses: 1650,
+  debts: ['none'],
+  projects: ['home'],
+  homeWhen: 'later',
+  goal: 'growth',
+  drop: 'wait',
+  blocker: 'none',
+  experience: 'funds',
+  crypto: 'little',
+  tax: '11',
+});
+
+/**
+ * Planification d'exemple, au format de PlanningContext. Les libellés viennent
+ * des traductions, pour que le budget s'affiche dans la langue de l'app.
+ * @param {{labels: object, goalName: string, today?: Date}} params
+ *   labels : les libellés du budget par défaut (`budget.defaults`)
+ */
+export const buildDemoPlanning = ({ labels, goalName, today = new Date() }) => {
+  const world = DEMO_ASSETS.find((a) => a.symbol === 'WPEA.PA');
+  // Le même achat que l'exemple : 100 € le 5 du mois sur le PEA.
+  const plans = [{
+    id: 'demo_plan_world',
+    assetId: world.assetId,
+    assetType: world.assetType,
+    symbol: world.symbol,
+    name: world.name,
+    account: 'PEA',
+    amount: 100,
+    day: 5,
+    active: true,
+    handled: [],
+  }];
+  const budget = defaultBudget({
+    labels,
+    income: DEMO_PROFILE.income,
+    expenses: DEMO_PROFILE.expenses,
+    plans: [{ name: labels.etf, amount: 100 }, { name: labels.savings, amount: 50 }],
+  });
+  const goalDate = new Date(today.getFullYear() + 5, today.getMonth(), 1, 10);
+  return {
+    goals: [{ id: 'demo_goal_home', name: goalName, target: 20000, date: goalDate.toISOString(), kind: 'home' }],
+    monthlyExpenses: budgetTotals(budget).expenses,
+    targets: null,
+    plans,
+    fees: {},
+    exposure: {},
+    dismissedDividends: [],
+    brokerRules: { ...RULES },
+    accountInstitutions: { ...INSTITUTIONS },
+    ttf: true,
+    reminders: { plans: true, cash: false },
+    marketRules: {},
+    profile: { answers: { ...DEMO_PROFILE }, completedAt: today.toISOString() },
+    budget,
+    onboarded: true,
+  };
 };

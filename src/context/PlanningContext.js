@@ -6,15 +6,22 @@
  * Tout est persisté en AsyncStorage et inclus dans les sauvegardes, sauf le
  * mot de passe des sauvegardes, qui vit dans le trousseau sécurisé
  * (expo-secure-store) et reste propre au téléphone.
+ *
+ * En mode démo, une planification d'exemple, sous une autre clé, remplace la
+ * vraie : profil, budget et objectifs fictifs, la vraie n'est ni lue ni
+ * modifiée. Les rappels mensuels restent ceux des vrais achats programmés.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
 
 import { STORAGE_KEYS } from '../constants';
 import { useSettings } from './SettingsContext';
+import { usePortfolio } from './PortfolioContext';
+import { demoMode, DEMO_PLANNING_KEY } from '../services/storage';
+import { buildDemoPlanning } from '../core/demoData';
 import { syncMonthlyReminders } from '../services/notifications';
 import { markHandled } from '../core/plans';
 import { ruleForInstitution, tariffOf } from '../core/brokerFees';
@@ -78,14 +85,32 @@ export const PlanningProvider = ({ children }) => {
   const [state, setState] = useState(DEFAULT);
   const [hydrated, setHydrated] = useState(false);
   const [hasPassword, setHasPassword] = useState(false);
+  const { demo } = usePortfolio();
+  const [isDemo, setIsDemo] = useState(false);
+  // Clé où écrire : celle de l'exemple en mode démo. Elle change en même temps
+  // que l'état, pour qu'une écriture ne mélange jamais l'exemple et le vrai.
+  const keyRef = useRef(STORAGE_KEYS.PLANNING);
+  const tRef = useRef(t);
+  useEffect(() => { tRef.current = t; }, [t]);
 
+  // Relue au lancement et à chaque bascule du mode démo.
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEYS.PLANNING);
-        const parsed = raw ? JSON.parse(raw) : {};
+        const onDemo = await demoMode.isOn();
+        const key = onDemo ? DEMO_PLANNING_KEY : STORAGE_KEYS.PLANNING;
+        const raw = await AsyncStorage.getItem(key);
+        let parsed = raw ? JSON.parse(raw) : null;
+        if (onDemo && !parsed) {
+          parsed = buildDemoPlanning({ labels: tRef.current('budget.defaults'), goalName: tRef.current('goals.suggest.home.name') });
+          await AsyncStorage.setItem(key, JSON.stringify(parsed)).catch(() => {});
+        }
+        if (!onDemo) AsyncStorage.removeItem(DEMO_PLANNING_KEY).catch(() => {});
+        parsed = parsed || {};
         if (alive) {
+          keyRef.current = key;
+          setIsDemo(onDemo);
           setState({
             ...exportable({ ...DEFAULT, ...parsed }),
             reminders: { ...DEFAULT.reminders, ...(parsed.reminders || {}) },
@@ -100,12 +125,12 @@ export const PlanningProvider = ({ children }) => {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [demo]);
 
   const update = useCallback((patch) => {
     setState((prev) => {
       const next = { ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) };
-      AsyncStorage.setItem(STORAGE_KEYS.PLANNING, JSON.stringify(next)).catch(() => {});
+      AsyncStorage.setItem(keyRef.current, JSON.stringify(next)).catch(() => {});
       return next;
     });
   }, []);
@@ -198,9 +223,10 @@ export const PlanningProvider = ({ children }) => {
     ? { profile: { answers, completedAt: new Date().toISOString() }, monthlyExpenses: answers.expenses > 0 ? answers.expenses : null }
     : { profile: null }), [update]);
 
-  // Rappels mensuels : un par plan actif, plus la mise à jour des livrets.
+  // Rappels mensuels : un par plan actif, plus la mise à jour des livrets. En
+  // mode démo, on n'y touche pas : ceux des vrais plans restent programmés.
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || isDemo) return;
     const list = [];
     if (state.reminders.plans) {
       state.plans.filter((p) => p.active).forEach((p) => list.push({
@@ -214,7 +240,7 @@ export const PlanningProvider = ({ children }) => {
       list.push({ id: 'cash', day: 1, title: t('plans.cashReminderTitle'), body: t('plans.cashReminderBody') });
     }
     syncMonthlyReminders(list);
-  }, [hydrated, state.plans, state.reminders, t]);
+  }, [hydrated, isDemo, state.plans, state.reminders, t]);
 
   // --- Sauvegarde ------------------------------------------------------------
   const backupSettings = useCallback(

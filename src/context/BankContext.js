@@ -422,12 +422,16 @@ export const BankProvider = ({ children }) => {
     return () => sub.remove();
   }, [ready, hasKeys, demo, isLoading]);
 
+  // En mode démo, les vraies banques reliées ne s'affichent pas : montrer
+  // l'app ne doit dévoiler ni ses banques ni ses comptes.
+  const visibleLinks = useMemo(() => (demo ? [] : links), [demo, links]);
+
   const value = useMemo(() => ({
     ready,
-    links,
+    links: visibleLinks,
     hasKeys,
     syncing,
-    linkedIds: linkedCashIds(links.filter((l) => l.status !== 'pending')),
+    linkedIds: linkedCashIds(visibleLinks.filter((l) => l.status !== 'pending')),
     saveKeys,
     removeKeys,
     loadInstitutions,
@@ -440,7 +444,7 @@ export const BankProvider = ({ children }) => {
     unassign,
     ignore,
     suggestFor: (account, link, used) => suggestTarget({ ...account, institution: link.institution }, cashAccounts, used),
-  }), [ready, links, hasKeys, syncing, saveKeys, removeKeys, loadInstitutions, connect, renew, resolveLink, assignAccounts, syncAll, disconnect, unassign, ignore, cashAccounts]);
+  }), [ready, visibleLinks, hasKeys, syncing, saveKeys, removeKeys, loadInstitutions, connect, renew, resolveLink, assignAccounts, syncAll, disconnect, unassign, ignore, cashAccounts]);
 
   return <BankContext.Provider value={value}>{children}</BankContext.Provider>;
 };

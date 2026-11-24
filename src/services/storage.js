@@ -7,9 +7,10 @@
  *  - cache des historiques de cours ;
  *  - sauvegarde / restauration en fichier JSON, protégée ou non par mot de passe.
  *
- * Mode démo : les opérations, dividendes et liquidités d'exemple vivent sous
- * d'autres clés. Les vraies données ne sont ni lues ni modifiées tant qu'il
- * est actif, et le quitter efface seulement l'exemple.
+ * Mode démo : les opérations, dividendes, liquidités, crédits, biens et la
+ * planification d'exemple vivent sous d'autres clés. Les vraies données ne
+ * sont ni lues ni modifiées tant qu'il est actif, et le quitter efface
+ * seulement l'exemple.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -126,7 +127,13 @@ export const cashRepo = makeRepository(STORAGE_KEYS.CASH_ACCOUNTS, 'cash', norma
 export const loansRepo = makeRepository(STORAGE_KEYS.LOANS, 'loan', normalizeLoan);
 export const propertiesRepo = makeRepository(STORAGE_KEYS.PROPERTIES, 'prop', normalizeProperty);
 
-const DEMO_KEYS = [transactionsRepo, dividendsRepo, cashRepo, loansRepo, propertiesRepo].map((r) => `${r.key}${DEMO_SUFFIX}`);
+/** Planification d'exemple (profil, budget, objectifs…), écrite par PlanningContext. */
+export const DEMO_PLANNING_KEY = `${STORAGE_KEYS.PLANNING}${DEMO_SUFFIX}`;
+
+const DEMO_KEYS = [
+  ...[transactionsRepo, dividendsRepo, cashRepo, loansRepo, propertiesRepo].map((r) => `${r.key}${DEMO_SUFFIX}`),
+  DEMO_PLANNING_KEY,
+];
 
 export const demoMode = {
   isOn: isDemo,

@@ -359,8 +359,10 @@ export const PortfolioProvider = ({ children }) => {
   }, [totals, cash.total, realEstate.value, debts.remaining]);
 
   const pea = useMemo(
-    () => computePeaStats({ transactions, fx, settings: peaSettings || {} }),
-    [transactions, fx, peaSettings],
+    // En mode démo, la date d'ouverture et les versements saisis du vrai PEA ne
+    // s'appliquent pas à l'exemple.
+    () => computePeaStats({ transactions, fx, settings: demo ? {} : peaSettings || {} }),
+    [transactions, fx, peaSettings, demo],
   );
 
   const sortedHistoryKeys = useMemo(() => {
