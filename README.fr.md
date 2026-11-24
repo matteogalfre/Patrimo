@@ -8,8 +8,8 @@ Pensée d'abord pour les investisseurs français. *[Read in English](README.md)*
 
 <div align="center">
   <img src="docs/screenshots/home.jpg" width="30%" alt="Le patrimoine dans le temps">
-  <img src="docs/screenshots/portfolio.jpg" width="30%" alt="Chaque position, par enveloppe">
   <img src="docs/screenshots/asset.jpg" width="30%" alt="Un actif, avec la plus-value et l'effet de change">
+  <img src="docs/screenshots/budget.jpg" width="30%" alt="Le budget du mois, euro par euro">
   <img src="docs/screenshots/diversification.jpg" width="30%" alt="La diversification par pays">
   <img src="docs/screenshots/benchmark.jpg" width="30%" alt="Tes versements rejoués sur un indice">
   <img src="docs/screenshots/markets.jpg" width="30%" alt="Les marchés : où on en est">

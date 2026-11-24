@@ -43,8 +43,8 @@ Obtainium keeps the app up to date straight from this repository's releases.
 
 <div align="center">
   <img src="docs/screenshots/home.jpg" width="30%" alt="Net worth over time">
-  <img src="docs/screenshots/portfolio.jpg" width="30%" alt="Every holding, by account">
   <img src="docs/screenshots/asset.jpg" width="30%" alt="An asset, with your gains and the currency effect">
+  <img src="docs/screenshots/budget.jpg" width="30%" alt="Your monthly budget, euro by euro">
   <img src="docs/screenshots/diversification.jpg" width="30%" alt="Diversification by country">
   <img src="docs/screenshots/benchmark.jpg" width="30%" alt="Your deposits replayed on an index">
   <img src="docs/screenshots/markets.jpg" width="30%" alt="Markets: where things stand">
