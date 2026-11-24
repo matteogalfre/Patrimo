@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/icon.svg" width="140" height="140" alt="Patrimo icon">
   <h1>Patrimo</h1>
-  <p>Your whole net worth in one place. No account, no cloud: everything stays on your phone.</p>
+  <p>Your whole net worth in one place, made for investors in France. No account, no cloud: everything stays on your phone.</p>
 
   <img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-b5560f?style=flat-square">
   <img alt="Android" src="https://img.shields.io/badge/platform-Android-b5560f?style=flat-square">
@@ -11,10 +11,15 @@
   <p><a href="README.fr.md">Lire en français</a></p>
 </div>
 
+## Made for France
+
+Patrimo is built around investing in France: the PEA and its cap, the Livret A and other regulated savings accounts, French brokers' fees, French inflation, and the capital gains tax forms. Stocks, ETFs and crypto work from anywhere and the app speaks 6 languages, but the savings, fees and tax pages only make sense if you invest in France.
+
 ## Features
 
 - [x] Stocks, ETFs, crypto, savings accounts, life insurance, employee savings, loans and real estate, all in one net worth
-- [x] Built for French investors first: PEA and its €150,000 cap, French savings accounts (Livret A, LDDS, LEP…), tax help for forms 2074 and 2086
+- [x] PEA and its €150,000 cap, Livret A, LDDS, LEP and other regulated savings accounts, with their official rates
+- [x] Tax help for the French capital gains forms (2074 for stocks, 2086 for crypto)
 - [x] Real performance: price moves, currency effect, realized gains and dividends, annualized return (IRR) before and after inflation
 - [x] Compare your deposits with an index (MSCI World, S&P 500, Nasdaq-100, CAC 40) or a Livret A, at the same dates
 - [x] Dividends: calendar, yield on cost, 12-month projection, and reminders for the ones you haven't logged yet
