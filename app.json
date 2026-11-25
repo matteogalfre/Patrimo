@@ -2,7 +2,7 @@
   "expo": {
     "name": "Patrimo",
     "slug": "patrimo",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -32,7 +32,12 @@
         "monochromeImage": "./assets/monochrome-icon.png",
         "backgroundColor": "#F6F2EC"
       },
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "plugins": [
       "expo-screen-orientation",
@@ -42,7 +47,6 @@
           "faceIDPermission": "Permet de déverrouiller l'application avec Face ID"
         }
       ],
-      "expo-notifications",
       [
         "expo-document-picker",
         {

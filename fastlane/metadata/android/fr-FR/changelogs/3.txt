@@ -1,0 +1,1 @@
+Notifications Android sans Firebase ni services Google, moins de permissions.

@@ -1,0 +1,20 @@
+Patrimo suit tout ton patrimoine : actions, ETF, cryptos, livrets, assurance-vie, crédits et immobilier. Sans compte, sans cloud : tout reste sur le téléphone.
+
+Il est pensé d'abord pour investir en France : le PEA et son plafond, le Livret A et les autres livrets réglementés avec leurs taux officiels, les frais des courtiers français et une aide pour les formulaires d'impôt sur les plus-values (2074, 2086).
+
+<b>Fonctions</b>
+• Le patrimoine dans le temps, par enveloppe (PEA, compte-titres, crypto, liquidités)
+• La vraie performance : évolution des cours, effet de change, dividendes, rendement annualisé avant et après inflation
+• Tes versements rejoués sur un indice (MSCI World, S&P 500, Nasdaq-100, CAC 40) ou un Livret A
+• Calendrier des dividendes, rendement sur prix de revient et projection sur 12 mois
+• Diversification par pays et par secteur, ETF décomposés selon leur indice
+• Budget en diagramme de Sankey, objectifs, épargne de précaution, indépendance financière
+• Crédits, immobilier et simulateur d'achat
+• Alertes de cours, widget, code PIN et biométrie, mode discret
+• Sauvegarde en fichier, et mode démo pour essayer sans ses données
+• 6 langues : français, anglais, espagnol, portugais, allemand, italien
+
+<b>Réseau</b>
+Patrimo ne récupère que des données de marché publiques : cours sur Yahoo Finance et Binance, taux de change de la BCE (Frankfurter), inflation sur Eurostat, recherche d'ISIN sur OpenFIGI et logos. Ces services voient quels symboles sont demandés, jamais les montants. La synchronisation bancaire est facultative et passe par GoCardless Bank Account Data, avec tes propres clés gratuites.
+
+Patrimo est un outil de suivi, pas un conseil financier ni fiscal.

@@ -5,7 +5,7 @@
 
   <img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-b5560f?style=flat-square">
   <img alt="Android" src="https://img.shields.io/badge/platform-Android-b5560f?style=flat-square">
-  <img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-b5560f?style=flat-square">
+  <img alt="Latest release" src="https://img.shields.io/github/v/release/matteogalfre/Patrimo?color=b5560f&style=flat-square">
   <img alt="6 languages" src="https://img.shields.io/badge/languages-6-b5560f?style=flat-square">
 
   <p><a href="README.fr.md">Lire en français</a></p>

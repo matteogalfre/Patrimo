@@ -1,0 +1,7 @@
+{
+  "name": "patrimo-notify",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Notifications locales Android de Patrimo, sans Firebase",
+  "main": "index.js"
+}

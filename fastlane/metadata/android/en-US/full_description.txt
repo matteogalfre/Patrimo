@@ -1,0 +1,20 @@
+Patrimo tracks your whole net worth: stocks, ETFs, crypto, savings accounts, life insurance, loans and real estate. No account, no cloud: everything stays on your phone.
+
+It is built for investing in France first: the PEA and its cap, the Livret A and other regulated savings accounts with their official rates, French brokers' fees and help with the capital gains tax forms (2074, 2086).
+
+<b>Features</b>
+• Net worth over time, by account (PEA, brokerage account, crypto, cash)
+• Real performance: price moves, currency effect, dividends, annualized return before and after inflation
+• Your deposits replayed on an index (MSCI World, S&P 500, Nasdaq-100, CAC 40) or a Livret A
+• Dividends calendar, yield on cost and 12-month projection
+• Diversification by country and sector, ETFs broken down by the index they track
+• Budget as a Sankey diagram, goals, emergency fund, financial independence
+• Loans, real estate and a home purchase simulator
+• Price alerts, home screen widget, PIN and biometric lock, privacy mode
+• Backup to a file, and a demo mode to try the app without your own data
+• 6 languages: English, French, Spanish, Portuguese, German, Italian
+
+<b>Network</b>
+Patrimo only fetches public market data: prices from Yahoo Finance and Binance, exchange rates from the European Central Bank (Frankfurter), inflation from Eurostat, ISIN search from OpenFIGI and logos. These services see which symbols are asked for, never your amounts. Bank sync is optional and goes through GoCardless Bank Account Data with your own free keys.
+
+Patrimo is a tracking tool, not financial or tax advice.

@@ -157,3 +157,7 @@ jspm_packages/
 
 # Notes perso (veille, audits), jamais publiées
 /notes/
+
+# Projets natifs générés par expo prebuild (CNG)
+/android
+/ios
