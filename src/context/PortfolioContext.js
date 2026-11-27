@@ -21,6 +21,7 @@ import { AppState } from 'react-native';
 
 import { useSettings } from './SettingsContext';
 import { transactionsRepo, dividendsRepo, cashRepo, historyCache, demoMode, loansRepo, propertiesRepo } from '../services/storage';
+import useRealEstateItems from './useRealEstateItems';
 import { buildDemoData, DEMO_ASSETS } from '../core/demoData';
 import { marketData } from '../services/marketData';
 import { fxService } from '../services/fxService';
@@ -30,7 +31,7 @@ import { ACCOUNTS, positionKey } from '../core/assets';
 import { cashValueSeries, computeCash, normalizeCashAccount, withBalance } from '../core/cash';
 import { computeIncome } from '../core/income';
 import { computeDebts } from '../core/loans';
-import { computeRealEstate, withEstimate } from '../core/realEstate';
+import { computeRealEstate } from '../core/realEstate';
 import { formatDateKey } from '../utils/formatters';
 import { MONTHS_SHORT_FR } from '../constants';
 
@@ -114,6 +115,9 @@ export const PortfolioProvider = ({ children }) => {
   const reloadQueued = useRef(null);
   const baseRef = useRef(baseCurrency);
   baseRef.current = baseCurrency;
+  // Derniers historiques chargés, pour ne pas relire ni reparser le cache à
+  // chaque retour dans l'app.
+  const memHistories = useRef(null);
 
   /**
    * Historiques de cours (graphique) et complétion des prix manquants.
@@ -127,31 +131,43 @@ export const PortfolioProvider = ({ children }) => {
       }
       const fromKey = formatDateKey(fromDate);
       const ids = assets.map((a) => a.assetId);
-      const cached = await historyCache.read();
+      const idsKey = [...ids].sort().join('|');
+      const today = formatDateKey(new Date());
       let result;
 
-      if (historyCache.isUsable(cached, ids, fromKey)) {
-        result = { series: cached.series, currencies: cached.currencies || {} };
+      // Déjà chargés aujourd'hui pour les mêmes actifs : rien à relire ni à recalculer.
+      const mem = memHistories.current;
+      if (mem && mem.idsKey === idsKey && mem.fromKey === fromKey && mem.day === today) {
+        result = mem.result;
       } else {
-        // On ne retélécharge que ce qui manque : les derniers jours d'un actif
-        // déjà en cache (avec une semaine de recouvrement), tout l'historique
-        // d'un actif nouveau.
-        const coversStart = cached && (!cached.from || cached.from <= fromKey);
-        const since = {};
-        if (coversStart) {
+        const cached = await historyCache.read(ids);
+        if (historyCache.isUsable(cached, ids, fromKey)) {
+          result = { series: cached.series, currencies: cached.currencies };
+        } else {
+          // On ne retélécharge que ce qui manque : les derniers jours d'un actif
+          // déjà en cache depuis la bonne date (avec une semaine de
+          // recouvrement), tout l'historique d'un actif nouveau.
+          const since = {};
           ids.forEach((id) => {
-            const keys = Object.keys(cached.series[id] || {}).sort();
-            if (keys.length) since[id] = new Date(new Date(`${keys[keys.length - 1]}T12:00:00`).getTime() - 7 * DAY);
+            const keys = Object.keys(cached?.series?.[id] || {}).sort();
+            const startsInTime = !cached?.froms?.[id] || cached.froms[id] <= fromKey;
+            if (keys.length && startsInTime) since[id] = new Date(new Date(`${keys[keys.length - 1]}T12:00:00`).getTime() - 7 * DAY);
           });
+          const fresh = await marketData.getHistories(assets, fromDate, since);
+          result = { series: {}, currencies: { ...(cached?.currencies || {}), ...fresh.currencies } };
+          const froms = {};
+          ids.forEach((id) => {
+            // Un actif dont la source a échoué garde son ancien historique.
+            result.series[id] = { ...(since[id] ? cached.series[id] : {}), ...(fresh.series[id] || {}) };
+            if (!Object.keys(result.series[id]).length && cached?.series?.[id]) result.series[id] = cached.series[id];
+            froms[id] = since[id] && cached.froms?.[id] ? cached.froms[id] : fromKey;
+          });
+          historyCache.write({ ...result, froms });
         }
-        const fresh = await marketData.getHistories(assets, fromDate, since);
-        result = { series: {}, currencies: { ...(cached?.currencies || {}), ...fresh.currencies } };
-        ids.forEach((id) => {
-          // Un actif dont la source a échoué garde son ancien historique.
-          result.series[id] = { ...(since[id] ? cached.series[id] : {}), ...(fresh.series[id] || {}) };
-          if (!Object.keys(result.series[id]).length && cached?.series?.[id]) result.series[id] = cached.series[id];
-        });
-        historyCache.write({ ...result, from: coversStart && cached.from ? cached.from : fromKey });
+        // Hors ligne ou source muette : on ne garde pas un résultat incomplet,
+        // le prochain chargement réessaiera.
+        const complete = ids.every((id) => Object.keys(result.series[id] || {}).length > 0);
+        memHistories.current = complete ? { idsKey, fromKey, day: today, result } : null;
       }
       if (!isMounted.current) return;
       setHistories(result);
@@ -171,7 +187,7 @@ export const PortfolioProvider = ({ children }) => {
       });
       if (!patches.length) return;
 
-      await Promise.all(patches.map(({ id, ...patch }) => transactionsRepo.update(id, patch)));
+      await transactionsRepo.updateMany(patches);
       if (!isMounted.current) return;
       const byId = new Map(patches.map((p) => [p.id, p]));
       setTransactions((prev) => prev.map((t) => (byId.has(t.id) ? { ...t, ...byId.get(t.id) } : t)));
@@ -212,7 +228,9 @@ export const PortfolioProvider = ({ children }) => {
       const quotesP = held.length ? marketData.getQuotes(held, { force }).catch(() => ({})) : Promise.resolve({});
       let q = await withDeadline(quotesP);
       if (q === LATE) {
-        q = quotesRef.current;
+        // Au lancement, rien en mémoire : les derniers cours gardés sur le
+        // téléphone plutôt que le prix de revient.
+        q = Object.keys(quotesRef.current).length ? quotesRef.current : await marketData.cachedQuotes(held);
         quotesP.then((fresh) => isMounted.current && Object.keys(fresh).length && setQuotes(fresh));
       }
       const currencies = [
@@ -324,6 +342,13 @@ export const PortfolioProvider = ({ children }) => {
   );
 
   const { positions, totals, warnings } = computed;
+
+  // Hors ligne : date du plus ancien cours gardé encore affiché, sinon null.
+  const quotesAsOf = useMemo(() => {
+    const held = new Set(positions.filter((p) => p.isHeld).map((p) => p.assetId));
+    const times = Object.entries(quotes).filter(([id, q]) => q.stale && held.has(id)).map(([, q]) => q.at).filter((x) => x > 0);
+    return times.length ? new Date(Math.min(...times)) : null;
+  }, [quotes, positions]);
 
   const { assets } = computed;
 
@@ -576,50 +601,9 @@ export const PortfolioProvider = ({ children }) => {
   }, []);
 
   // Crédits et biens immobiliers : saisis à la main, sans cours à charger.
-  const addLoan = useCallback(async (fields) => {
-    const { data: record, error: err } = await loansRepo.add(fields);
-    if (err) throw err;
-    setLoans((prev) => [...prev, record]);
-    return record;
-  }, []);
-  const updateLoan = useCallback(async (id, patch) => {
-    const { data: record, error: err } = await loansRepo.update(id, patch);
-    if (err) throw err;
-    setLoans((prev) => prev.map((x) => (x.id === id ? record : x)));
-    return record;
-  }, []);
-  const deleteLoan = useCallback(async (id) => {
-    const { error: err } = await loansRepo.remove(id);
-    if (err) throw err;
-    setLoans((prev) => prev.filter((x) => x.id !== id));
-  }, []);
-  const addProperty = useCallback(async (fields) => {
-    const { data: record, error: err } = await propertiesRepo.add(fields);
-    if (err) throw err;
-    setProperties((prev) => [...prev, record]);
-    return record;
-  }, []);
-  const updateProperty = useCallback(async (id, patch) => {
-    const { data: record, error: err } = await propertiesRepo.update(id, patch);
-    if (err) throw err;
-    setProperties((prev) => prev.map((x) => (x.id === id ? record : x)));
-    return record;
-  }, []);
-  /** Nouvelle estimation de la valeur d'un bien (remplace celle du même jour). */
-  const recordPropertyValue = useCallback(async (id, value, date = new Date()) => {
-    const property = properties.find((x) => x.id === id);
-    if (!property) throw new Error('NOT_FOUND');
-    return updateProperty(id, { history: withEstimate(property, value, date).history });
-  }, [properties, updateProperty]);
-  const deleteProperty = useCallback(async (id) => {
-    const { error: err } = await propertiesRepo.remove(id);
-    if (err) throw err;
-    setProperties((prev) => prev.filter((x) => x.id !== id));
-    // Un crédit lié reste : il ne pointe plus vers rien.
-    const linked = loans.filter((l) => l.propertyId === id);
-    await Promise.all(linked.map((l) => loansRepo.update(l.id, { propertyId: null })));
-    if (linked.length) setLoans((prev) => prev.map((l) => (l.propertyId === id ? { ...l, propertyId: null } : l)));
-  }, [loans]);
+  const {
+    addLoan, updateLoan, deleteLoan, addProperty, updateProperty, recordPropertyValue, deleteProperty,
+  } = useRealEstateItems({ loans, setLoans, properties, setProperties });
 
   // ---------------------------------------------------------------------------
   // Lectures pratiques pour les écrans
@@ -670,6 +654,7 @@ export const PortfolioProvider = ({ children }) => {
     cashAccounts,
     income,
     warnings,
+    quotesAsOf,
     pea,
     isLoading,
     isRefreshing,
@@ -714,7 +699,7 @@ export const PortfolioProvider = ({ children }) => {
     deleteProperty,
   }), [
     baseCurrency, transactions, dividends, quotes, fx, positions, assets, totals,
-    warnings, pea, isLoading, isRefreshing, lastUpdated, error, refresh, reload, demo, setDemo,
+    warnings, quotesAsOf, pea, isLoading, isRefreshing, lastUpdated, error, refresh, reload, demo, setDemo,
     getChartData, getSparkline, getPriceAtDate, getAssetHistory, getValuesAt, addTransaction, updateTransaction, deleteTransactions,
     deletePosition, addDividend, updateDividend, deleteDividends, getAsset,
     getPosition, getTransactionsFor, getDividendsFor, getHeldQuantity,

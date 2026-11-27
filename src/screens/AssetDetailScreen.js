@@ -38,6 +38,7 @@ import { terInfo } from '../core/fees';
 import { historicalReturns } from '../core/assetReturns';
 import { sincePurchase } from '../core/performance';
 import { COUNTRIES, INDEX_HISTORY, INDEX_KEYS, SECTORS } from '../constants/exposureData';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const DAY = 24 * 60 * 60 * 1000;
 const PERIODS = [
@@ -108,6 +109,7 @@ const AssetDetailScreen = ({ route, navigation }) => {
   // Rendement moyen : cours quotidiens sur ~13 ans (précis, année par année),
   // complétés pour une action plus ancienne par l'historique hebdomadaire complet (20, 30 ans).
   const [returns, setReturns] = useState(null);
+  const [showReturnsInfo, setShowReturnsInfo] = useState(false);
   useEffect(() => {
     let alive = true;
     const from = new Date(Date.now() - LONG_HISTORY_DAYS * DAY);
@@ -133,6 +135,8 @@ const AssetDetailScreen = ({ route, navigation }) => {
       alive = false;
     };
   }, [assetId, assetType, symbol]);
+
+  const hasReturns = !!returns && (returns.horizons.length > 0 || !!returns.since);
 
   // Pour un ETF reconnu : la moyenne de son indice sur plusieurs décennies.
   const trackedIndex = assetType === ASSET_TYPES.STOCK ? classify({ symbol, name: asset?.name || symbol }, exposure[assetId]) : null;
@@ -303,39 +307,19 @@ const AssetDetailScreen = ({ route, navigation }) => {
   const colorOf = (v) => (v >= 0 ? theme.colors.success : theme.colors.error);
 
   // Moyenne de l'indice suivi sur longue période (10, 20, 30 ans, depuis le début).
-  const indexSection = () => {
+  // Indice suivi par l'ETF : sa plus longue moyenne, sur une seule ligne.
+  const indexLine = (() => {
     if (!indexKey || !indexReturns) return null;
-    const long = indexReturns.horizons.filter((h) => h.years >= 10);
-    const top = long[long.length - 1];
+    const top = indexReturns.horizons.filter((h) => h.years >= 10).pop();
     if (!top) return null;
     const info = INDEX_HISTORY[indexKey];
-    const cells = [
-      ...long.map((h) => ({ key: `i${h.years}`, label: t('returns.years', { count: h.years }), pct: h.pct })),
-      ...(indexReturns.since && indexReturns.since.years > top.years + 0.5
-        ? [{ key: 'isince', label: t('returns.since', { year: indexReturns.since.year }), pct: indexReturns.since.pct }]
-        : []),
-    ];
-    return (
-      <View style={[styles.indexBlock, { borderTopColor: theme.colors.borderLight }]}>
-        <Text style={[styles.indexTitle, { color: theme.colors.text }]}>{t('returns.indexTitle', { index: t(`indices.${indexKey}`) })}</Text>
-        <Text style={[styles.returnsLead, { color: theme.colors.text }]}>
-          {t('returns.lead', { count: top.years })}{' '}
-          <Text style={{ color: colorOf(top.pct) }}>{t('returns.perYear', { value: formatPercent(top.pct) })}</Text>
-        </Text>
-        <View style={styles.returnsGrid}>
-          {cells.map((c) => (
-            <View key={c.key} style={[styles.returnsCell, { backgroundColor: theme.colors.backgroundSecondary }]}>
-              <Text style={[styles.returnsValue, { color: colorOf(c.pct) }]}>{formatPercent(c.pct)}</Text>
-              <Text style={[styles.returnsLabel, { color: theme.colors.textTertiary }]}>{c.label}</Text>
-            </View>
-          ))}
-        </View>
-        <Text style={[styles.note, { color: theme.colors.textTertiary }]}>
-          {t(info.total ? 'returns.indexNoteTotal' : 'returns.indexNotePrice', { currency: info.currency })}
-        </Text>
-      </View>
-    );
-  };
+    return {
+      index: t(`indices.${indexKey}`),
+      years: top.years,
+      pct: top.pct,
+      note: t(info.total ? 'returns.indexNoteTotal' : 'returns.indexNotePrice', { currency: info.currency }),
+    };
+  })();
   const selectedOps = selected != null ? chart?.markerOps[selected] : null;
 
   const statRow = (label, value, valueColor) => (
@@ -528,44 +512,53 @@ const AssetDetailScreen = ({ route, navigation }) => {
           </View>
         ))}
 
-        {/* Rendement moyen par an, d'après l'historique des cours */}
-        {returns && (returns.horizons.length > 0 || returns.since) && (() => {
-          const longest = returns.horizons[returns.horizons.length - 1];
-          const cells = [
-            ...returns.horizons.map((h) => ({ key: `h${h.years}`, label: t('returns.years', { count: h.years }), pct: h.pct })),
-            ...(returns.since && (!longest || returns.since.years > longest.years + 0.5)
-              ? [{ key: 'since', label: t('returns.since', { year: returns.since.year }), pct: returns.since.pct }]
-              : []),
-          ];
-          const lead = longest || { years: Math.round(returns.since.years), pct: returns.since.pct };
-          const full = returns.calendar.filter((c) => !c.partial);
-          const best = full.length > 1 ? full.reduce((a, b) => (b.pct > a.pct ? b : a)) : null;
-          const worst = full.length > 1 ? full.reduce((a, b) => (b.pct < a.pct ? b : a)) : null;
-          const short = returns.calendar.length > 8;
+        {/* Rendement moyen par an : un chiffre, les autres durées en petit, les années en barres */}
+        {(hasReturns || indexLine) && (() => {
+          const longest = hasReturns ? returns.horizons[returns.horizons.length - 1] : null;
+          const lead = hasReturns ? longest || { years: Math.max(1, Math.round(returns.since.years)), pct: returns.since.pct } : null;
+          const others = hasReturns ? returns.horizons.filter((h) => h !== longest) : [];
+          const calendar = hasReturns ? returns.calendar : [];
+          const short = calendar.length > 8;
           return (
             <View style={[styles.card, styles.returnsCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('returns.title')}</Text>
-              <Text style={[styles.returnsLead, { color: theme.colors.text }]}>
-                {t('returns.lead', { count: lead.years })}{' '}
-                <Text style={{ color: colorOf(lead.pct) }}>{t('returns.perYear', { value: formatPercent(lead.pct) })}</Text>
-              </Text>
-              <View style={styles.returnsGrid}>
-                {cells.map((c) => (
-                  <View key={c.key} style={[styles.returnsCell, { backgroundColor: theme.colors.backgroundSecondary }]}>
-                    <Text style={[styles.returnsValue, { color: colorOf(c.pct) }]}>{formatPercent(c.pct)}</Text>
-                    <Text style={[styles.returnsLabel, { color: theme.colors.textTertiary }]}>{c.label}</Text>
-                  </View>
-                ))}
+              <View style={styles.returnsHead}>
+                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('returns.title')}</Text>
+                <TouchableOpacity
+                  onPress={() => setShowReturnsInfo((v) => !v)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('returns.info')}
+                  accessibilityState={{ expanded: showReturnsInfo }}
+                >
+                  <Ionicons name={showReturnsInfo ? 'information-circle' : 'information-circle-outline'} size={20} color={theme.colors.textTertiary} />
+                </TouchableOpacity>
               </View>
-              {returns.calendar.length > 1 && (
+              {lead && (
+                <View style={styles.returnsLeadRow}>
+                  <Text style={[styles.returnsBig, { color: colorOf(lead.pct) }]}>{t('returns.perYear', { value: formatPercent(lead.pct) })}</Text>
+                  <Text style={[styles.returnsOver, { color: theme.colors.textSecondary }]}>{t('returns.over', { count: lead.years })}</Text>
+                </View>
+              )}
+              {others.length > 0 && (
+                <Text style={[styles.returnsOthers, { color: theme.colors.textTertiary }]}>
+                  {others.map((h, i) => (
+                    <Text key={h.years}>
+                      {i > 0 ? '  ·  ' : ''}
+                      {t('returns.years', { count: h.years })}{' '}
+                      <Text style={{ color: colorOf(h.pct), fontWeight: '600' }}>{formatPercent(h.pct)}</Text>
+                    </Text>
+                  ))}
+                </Text>
+              )}
+              {calendar.length > 1 && (
                 <View style={styles.returnsChart}>
                   <BarChart
-                    data={returns.calendar.map((c) => ({
+                    data={calendar.map((c) => ({
                       label: short ? `'${String(c.year).slice(-2)}` : String(c.year),
                       caption: c.partial ? t('performance.ytd', { year: c.year }) : String(c.year),
                       value: c.pct,
                     }))}
-                    height={120}
+                    height={110}
                     color={theme.colors.success}
                     mutedColor={theme.colors.successBg}
                     negativeColor={theme.colors.error}
@@ -577,26 +570,22 @@ const AssetDetailScreen = ({ route, navigation }) => {
                   />
                 </View>
               )}
-              {best && worst && (
-                <Text style={[styles.opSub, { color: theme.colors.textSecondary }]}>
-                  {t('returns.bestWorst', {
-                    best: formatPercent(best.pct), bestYear: best.year, worst: formatPercent(worst.pct), worstYear: worst.year,
-                  })}
+              {indexLine && (
+                <Text style={[styles.indexLine, { color: theme.colors.textSecondary, borderTopColor: theme.colors.borderLight }]}>
+                  {t('returns.indexLine', { index: indexLine.index, count: indexLine.years })}{' '}
+                  <Text style={{ color: colorOf(indexLine.pct), fontWeight: '700' }}>{t('returns.perYear', { value: formatPercent(indexLine.pct) })}</Text>
                 </Text>
               )}
-              <Text style={[styles.note, { color: theme.colors.textTertiary }]}>
-                {t('returns.note', { currency: returns.currency || quoteCurrency || '' })}
-              </Text>
-              {indexSection()}
+              {showReturnsInfo && (
+                <Text style={[styles.note, { color: theme.colors.textTertiary }]}>
+                  {hasReturns ? t('returns.note', { currency: returns.currency || quoteCurrency || '' }) : ''}
+                  {hasReturns && indexLine ? '\n\n' : ''}
+                  {indexLine ? indexLine.note : ''}
+                </Text>
+              )}
             </View>
           );
         })()}
-        {!(returns && (returns.horizons.length > 0 || returns.since)) && indexSection() && (
-          <View style={[styles.card, styles.returnsCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('returns.title')}</Text>
-            {indexSection()}
-          </View>
-        )}
 
         {/* Frais annuels (TER) : actions et ETF seulement */}
         {assetType === ASSET_TYPES.STOCK && (() => {
@@ -770,7 +759,7 @@ const AssetDetailScreen = ({ route, navigation }) => {
           setEditFee(false);
         }}
         onSubmit={({ ter }) => {
-          const n = Number(String(ter || '').replace(',', '.').trim());
+          const n = Number(normalizeNumber(ter || ''));
           if (!Number.isFinite(n) || n < 0 || n > 5) return t('fees.terError');
           setFee(assetId, n);
           setEditFee(false);
@@ -816,14 +805,13 @@ const styles = StyleSheet.create({
   card: { marginHorizontal: 16, marginBottom: 12, borderRadius: 16, borderWidth: 1, padding: 12 },
   feeCard: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16 },
   returnsCard: { paddingHorizontal: 16, paddingVertical: 14 },
-  returnsLead: { fontSize: 15, fontWeight: '600', lineHeight: 21, marginTop: 6 },
-  returnsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  returnsCell: { flexGrow: 1, flexBasis: '28%', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 10 },
-  returnsValue: { fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  returnsLabel: { fontSize: 11, marginTop: 2 },
-  returnsChart: { marginTop: 14, marginBottom: 6 },
-  indexBlock: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 14, paddingTop: 14 },
-  indexTitle: { fontSize: 14, fontWeight: '700' },
+  returnsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  returnsLeadRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8, marginTop: 8 },
+  returnsBig: { fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  returnsOver: { fontSize: 13 },
+  returnsOthers: { fontSize: 12, marginTop: 6, fontVariant: ['tabular-nums'] },
+  returnsChart: { marginTop: 14, marginBottom: 2 },
+  indexLine: { fontSize: 13, borderTopWidth: StyleSheet.hairlineWidth, marginTop: 12, paddingTop: 12 },
   exposureRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9, paddingHorizontal: 4 },
   exposureLabel: { flex: 1 },
   exposureValue: { maxWidth: '60%' },

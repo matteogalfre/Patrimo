@@ -179,6 +179,15 @@ const PortfolioScreen = ({ navigation }) => {
                     </Text>
                   </View>
                 )}
+                {/* Sans filtre, la valeur compte aussi les liquidités : la plus-value et l'investi, non. */}
+                {!account && cash.total > 0 && (
+                  <Text style={[styles.summarySub, styles.summaryCash, { color: theme.colors.textTertiary }]}>
+                    {t('portfolio.ofWhichCash', {
+                      invested: formatAmount(summary.value - cash.total, { decimals: 0 }),
+                      cash: formatAmount(cash.total, { decimals: 0 }),
+                    })}
+                  </Text>
+                )}
               </View>
             )}
 
@@ -286,6 +295,7 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 30, fontWeight: '700', letterSpacing: -0.5, marginTop: 2, fontVariant: ['tabular-nums'] },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' },
   summarySub: { fontSize: 13 },
+  summaryCash: { marginTop: 4 },
   search: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,3 +1,5 @@
+import appJson from '../../app.json';
+
 export {
   CRYPTO_METADATA,
   PREDEFINED_CRYPTOS,
@@ -30,6 +32,7 @@ export const STORAGE_KEYS = {
   LOANS: '@patrimo_loans',
   PROPERTIES: '@patrimo_properties',
   BANK_INSTITUTIONS: '@patrimo_bank_institutions',
+  LAST_QUOTES: '@patrimo_last_quotes',
 };
 
 // Les cours passes ne changent plus : un rafraichissement par jour suffit.
@@ -82,9 +85,9 @@ export const LIMITS = {
   API_RETRY_DELAY: 1000,
 };
 
-// App info - doit correspondre à app.json
+// App info : la version vient d'app.json, une seule source.
 export const APP_INFO = {
   name: 'Patrimo',
-  version: '1.0.0',
-  buildNumber: '1',
+  version: appJson.expo.version,
+  repo: 'https://github.com/matteogalfre/Patrimo',
 };

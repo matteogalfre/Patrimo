@@ -14,6 +14,8 @@ import { openFigi } from './openFigi';
 import { ASSET_TYPES, makeAssetId } from '../core/assets';
 import { isIsin } from '../core/listings';
 import { CRYPTO_METADATA } from '../constants/cryptoMetadata';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../constants';
 
 /** Les paires Binance sont contre USDT, assimilé au dollar. */
 export const CRYPTO_QUOTE_CURRENCY = 'USD';
@@ -99,6 +101,46 @@ const searchCrypto = async (query) => {
   return [...new Set([...byName, ...bySymbol])].slice(0, 15).map(cryptoResult);
 };
 
+/**
+ * Derniers cours connus, gardés sur le téléphone : hors ligne ou si une
+ * source ne répond pas, une ligne est valorisée à son dernier cours (marqué
+ * `stale`, avec sa date) plutôt qu'à son prix de revient.
+ */
+const lastQuotes = {
+  async read() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.LAST_QUOTES);
+      const map = raw ? JSON.parse(raw) : {};
+      return map && typeof map === 'object' ? map : {};
+    } catch {
+      return {};
+    }
+  },
+  async merge(fresh) {
+    if (!Object.keys(fresh).length) return;
+    try {
+      const at = Date.now();
+      const map = await this.read();
+      Object.entries(fresh).forEach(([id, q]) => {
+        map[id] = { price: q.price, currency: q.currency, at };
+      });
+      await AsyncStorage.setItem(STORAGE_KEYS.LAST_QUOTES, JSON.stringify(map));
+    } catch {
+      // Un cache en moins, rien de grave.
+    }
+  },
+};
+
+/** Cours gardés pour ces actifs, marqués comme anciens (sans variation du jour). */
+const staleQuotes = (map, assets) => {
+  const out = {};
+  assets.forEach((a) => {
+    const q = map[a.assetId];
+    if (q?.price > 0) out[a.assetId] = { price: q.price, currency: q.currency, changePct: null, stale: true, at: q.at || 0 };
+  });
+  return out;
+};
+
 const split = (assets) => ({
   cryptos: assets.filter((a) => a.assetType === ASSET_TYPES.CRYPTO),
   stocks: assets.filter((a) => a.assetType !== ASSET_TYPES.CRYPTO),
@@ -152,7 +194,7 @@ export const marketData = {
     const [prices, changes, yq] = await Promise.all([
       cryptoSymbols.length ? priceService.getCurrentPrices(cryptoSymbols, { force }).catch(() => ({})) : {},
       cryptoSymbols.length ? priceService.get24hChange(cryptoSymbols, { force }).catch(() => ({})) : {},
-      stocks.length ? yahooApi.getQuotes(stocks.map((a) => a.symbol), { force }) : {},
+      stocks.length ? yahooApi.getQuotes(stocks.map((a) => a.symbol), { force }).catch(() => ({})) : {},
     ]);
 
     cryptos.forEach((a) => {
@@ -168,7 +210,16 @@ export const marketData = {
       const q = yq[a.symbol];
       if (q) out[a.assetId] = { price: q.price, currency: q.currency, changePct: q.changePct };
     });
+
+    await lastQuotes.merge(out);
+    const missing = assets.filter((a) => !out[a.assetId]);
+    if (missing.length) Object.assign(out, staleQuotes(await lastQuotes.read(), missing));
     return out;
+  },
+
+  /** Derniers cours gardés, sans appel réseau : pour afficher tout de suite au lancement. */
+  async cachedQuotes(assets = []) {
+    return staleQuotes(await lastQuotes.read(), assets);
   },
 
   /**
@@ -187,7 +238,8 @@ export const marketData = {
     if (isToday) {
       const q = await this.getQuotes([asset], { force: true });
       const hit = q[asset.assetId];
-      return hit ? { price: hit.price, currency: hit.currency } : null;
+      // Un cours gardé hors ligne peut dater : on ne pré-remplit pas avec.
+      return hit && !hit.stale ? { price: hit.price, currency: hit.currency } : null;
     }
     if (asset.assetType === ASSET_TYPES.CRYPTO) {
       const start = new Date(d);

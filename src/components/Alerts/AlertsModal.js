@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import { BaseModal } from '..';
 import { useAlerts } from '../../context/AlertsContext';
 import { useSettings } from '../../context/SettingsContext';
+import { normalizeNumber } from '../../utils/parseNumber';
 
 const AlertsModal = ({ visible, onClose, assetId, symbol, currentPrice, currency, theme, t }) => {
   const { getAlertsFor, addAlert, removeAlert, toggleAlert } = useAlerts();
@@ -27,7 +28,7 @@ const AlertsModal = ({ visible, onClose, assetId, symbol, currentPrice, currency
   );
 
   const handleAdd = useCallback(() => {
-    const normalized = parseFloat(String(target).replace(',', '.'));
+    const normalized = parseFloat(normalizeNumber(target));
     if (!Number.isFinite(normalized) || normalized <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     addAlert({ assetId, symbol, currency, targetPrice: normalized, direction });

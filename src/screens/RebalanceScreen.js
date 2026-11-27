@@ -38,6 +38,7 @@ import {
 } from '../core/rebalance';
 import { CLASS_COLORS } from '../utils/assetColors';
 import { formatPercent } from '../utils/formatters';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const STEP = 5;
 const roundTo = (v, step) => Math.round(v / step) * step;
@@ -72,7 +73,7 @@ const RebalanceScreen = ({ navigation }) => {
 
   const [targets, setLocal] = useState(() => (targetsValid(saved) ? saved : initialTargets(current)));
   const [amountInput, setAmountInput] = useState(String(monthly || 500));
-  const amount = Math.max(0, Number(String(amountInput).replace(/\s/g, '').replace(',', '.')) || 0);
+  const amount = Math.max(0, Number(normalizeNumber(amountInput)) || 0);
 
   const split = splitContribution({ values, targets, amount });
   const full = fullRebalance({ values, targets });

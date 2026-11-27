@@ -2,7 +2,7 @@
   "expo": {
     "name": "Patrimo",
     "slug": "patrimo",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -33,6 +33,7 @@
         "backgroundColor": "#F6F2EC"
       },
       "softwareKeyboardLayoutMode": "pan",
+      "allowBackup": false,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",

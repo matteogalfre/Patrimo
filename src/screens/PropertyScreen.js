@@ -17,9 +17,10 @@ import { ConfirmModal } from '../components';
 import DateField from '../components/Transaction/DateField';
 import { NOTARY_RATES, PROPERTY_KINDS } from '../core/realEstate';
 import { formatDate, formatPercent } from '../utils/formatters';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const parseNum = (s) => {
-  const n = Number(String(s ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
+  const n = Number(normalizeNumber(s ?? ''));
   return Number.isFinite(n) ? n : null;
 };
 

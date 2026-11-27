@@ -39,12 +39,16 @@ const amounts = (tx, fx) => {
   const qty = Math.abs(num(tx.quantity));
   const price = num(tx.unitPrice);
   const fees = Math.abs(num(tx.fees));
-  const rate = fx.at(tx.currency, tx.date) || 0;
+  const found = fx.at(tx.currency, tx.date);
+  const rate = found > 0 ? found : 0;
   return {
     qty,
     known: price > 0,
+    // Sans taux de change, le montant vaut 0 : le résultat est signalé comme estimé.
+    rateOk: rate > 0,
     buy: (qty * price + fees) * rate,
     sell: (qty * price - fees) * rate,
+    sellGross: qty * price * rate,
   };
 };
 
@@ -57,7 +61,7 @@ export const computeCtoTax = ({ transactions = [], dividends = [], fx, year }) =
   const sales = [];
   // Les années suivantes ne changent rien à celle-ci.
   sorted(transactions.filter((t) => t.account === ACCOUNTS.CTO && yearOf(t.date) <= year)).forEach((tx) => {
-    const lot = lots.get(tx.assetId) || { qty: 0, cost: 0 };
+    const lot = lots.get(tx.assetId) || { qty: 0, cost: 0, approx: false };
     const a = amounts(tx, fx);
     if (tx.side === 'sell') {
       const qty = Math.min(a.qty, lot.qty);
@@ -78,18 +82,26 @@ export const computeCtoTax = ({ transactions = [], dividends = [], fx, year }) =
           proceeds,
           cost,
           gain: proceeds - cost,
-          estimated: !a.known,
+          estimated: !a.known || !a.rateOk || lot.approx,
         });
+      }
+      // Ligne soldée : un rachat repart sur des prix connus.
+      if (lot.qty <= 1e-12) {
+        lot.qty = 0;
+        lot.cost = 0;
+        lot.approx = false;
       }
     } else {
       lot.qty += a.qty;
       lot.cost += a.buy;
+      if (!a.known || !a.rateOk) lot.approx = true;
     }
     lots.set(tx.assetId, lot);
   });
 
   const gains = sales.reduce((s, x) => s + Math.max(0, x.gain), 0);
   const losses = sales.reduce((s, x) => s + Math.min(0, x.gain), 0);
+  const ctoDividends = dividends.filter((d) => d.account === ACCOUNTS.CTO && yearOf(d.date) === year);
   return {
     sales,
     proceeds: sales.reduce((s, x) => s + x.proceeds, 0),
@@ -97,9 +109,8 @@ export const computeCtoTax = ({ transactions = [], dividends = [], fx, year }) =
     gains,
     losses,
     net: gains + losses,
-    dividends: dividends
-      .filter((d) => d.account === ACCOUNTS.CTO && yearOf(d.date) === year)
-      .reduce((s, d) => s + d.amount * (fx.at(d.currency, d.date) || 0), 0),
+    dividends: ctoDividends.reduce((s, d) => s + d.amount * (fx.at(d.currency, d.date) || 0), 0),
+    dividendsEstimated: ctoDividends.some((d) => !(fx.at(d.currency, d.date) > 0)),
   };
 };
 
@@ -125,25 +136,40 @@ export const computeCryptoTax = ({ transactions = [], fx, priceAt, year }) => {
     const held = holdings.get(tx.assetId) || 0;
     const qty = Math.min(a.qty, held);
     if (qty <= 0) return;
-    const proceeds = a.sell * (qty / a.qty);
+    const share = qty / a.qty;
+    let approximate = !a.known || !a.rateOk;
 
-    // Valeur de tout le portefeuille juste avant la cession. L'actif vendu est
-    // valorisé au prix de la vente ; les autres au cours de clôture du jour.
-    let approximate = !a.known;
+    // Cours unitaire de l'actif vendu, frais non déduits : celui de la vente,
+    // sinon la clôture du jour.
+    let unit = a.known && a.rateOk ? a.sellGross / a.qty : 0;
+    if (!(unit > 0)) {
+      const p = priceAt(tx.assetId, tx.date);
+      const r = p ? fx.at(p.currency, tx.date) : 0;
+      unit = p?.price > 0 && r > 0 ? p.price * r : 0;
+    }
+    // Formulaire 2086 : la plus-value prend le prix net de frais (ligne 217),
+    // la fraction d'acquisition le prix brut (ligne 216).
+    const gross = a.known && a.rateOk ? a.sellGross * share : unit * qty;
+    const fees = a.known && a.rateOk ? (a.sellGross - a.sell) * share : 0;
+    const proceeds = Math.max(0, gross - fees);
+
+    // Valeur de tout le portefeuille juste avant la cession, au cours du marché.
     let value = 0;
     holdings.forEach((q, assetId) => {
       if (q <= 1e-12) return;
       if (assetId === tx.assetId) {
-        value += (q * a.sell) / a.qty;
+        if (unit > 0) value += q * unit;
+        else approximate = true;
         return;
       }
       const p = priceAt(assetId, tx.date);
-      if (p?.price > 0) value += q * p.price * (fx.at(p.currency, tx.date) || 0);
+      const r = p ? fx.at(p.currency, tx.date) : 0;
+      if (p?.price > 0 && r > 0) value += q * p.price * r;
       else approximate = true;
     });
-    value = Math.max(value, proceeds);
+    value = Math.max(value, gross);
 
-    const fraction = value > 0 ? (pta * proceeds) / value : 0;
+    const fraction = value > 0 ? (pta * gross) / value : 0;
     pta = Math.max(0, pta - fraction);
     holdings.set(tx.assetId, held - qty);
 

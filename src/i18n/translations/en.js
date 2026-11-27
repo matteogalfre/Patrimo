@@ -24,6 +24,7 @@ export default {
     portfolio: 'Portfolio',
     add: 'Add',
     settings: 'Settings',
+    tools: 'Tools',
   },
 
   accounts: {
@@ -70,6 +71,12 @@ export default {
     legendValue: 'Value',
     legendInvested: 'Money invested',
     priceUnavailable: 'No price for {{symbols}}: valued at cost.',
+    staleQuotes: 'Offline: prices from {{date}}, updated once you are back online.',
+    oversold: {
+      one: '1 sale exceeds the quantity held: tap to check it.',
+      other: '{{count}} sales exceed the quantity held: tap to check.',
+    },
+    missingFx: 'No exchange rate for {{currencies}}: these amounts count as 0 for now.',
     pendingPrices: '{{count}} transaction(s) without a price: valued at the current price until the history loads.',
     noData: 'Add your first transaction to see your net worth here',
     chartLoading: 'Loading history…',
@@ -87,6 +94,7 @@ export default {
     title: 'Portfolio',
     holdings: 'Holdings',
     totalValue: 'Total value',
+    ofWhichCash: 'Investments {{invested}} · cash {{cash}}',
     netInvested: 'Invested',
     closed: 'Closed',
     showClosed: {
@@ -377,7 +385,7 @@ export default {
       missed: 'Gains missed if this {{amount}} stays in your accounts for {{count}} years:',
       zero: 'Move the slider to see what part of your cash could earn.',
     },
-    note: 'Starts from your current net worth ({{start}}): investments at the chosen return, cash at its accounts\' rate. Assumed average yearly returns, before tax and inflation: a projection, not a forecast.',
+    note: 'Starts from your current wealth ({{start}}). In today\'s euros: returns after inflation (savings accounts roughly track it), before tax. Same assumptions as the Independence screen. A projection, not a forecast.',
     investedMonthly: 'Invested each month',
     kept: 'Set aside on your accounts',
     hintBudget: 'From your budget: {{invest}} invested at the chosen return, and {{kept}} left on your accounts at your savings rate.',
@@ -409,7 +417,7 @@ export default {
       portfolioShort: 'portfolio {{amount}}',
       exempt: 'Exempt: total sales under {{amount}} for the year',
       formula: 'Gain = sale price − total acquisition cost × sale price ÷ portfolio value at the time of sale.',
-      note: 'Sales are assumed to be against euros (a crypto-to-crypto swap is not taxable). The portfolio value uses daily closing prices: lines marked * are approximate. Also remember to declare accounts on foreign platforms (form 3916-bis).',
+      note: 'Sales are assumed to be against euros (a crypto-to-crypto swap is not taxable). Lines marked * are approximate. Accounts on foreign platforms: form 3916-bis.',
       empty: 'No crypto sale in {{year}}.',
     },
     pea: {
@@ -513,7 +521,6 @@ export default {
     biometric: 'Biometric unlock',
     biometricEnabledMsg: 'Biometric unlock enabled.',
 
-    tools: 'TOOLS',
   },
 
   pinLock: {
@@ -571,7 +578,7 @@ export default {
     ter: 'Annual fees (TER)',
     terLine: '{{value}} a year, about {{amount}}',
     terRangeLine: '{{range}} a year depending on the source, about {{amount}}',
-    terHint: 'Add the TER to see what it costs you',
+    terHint: 'The TER is the fee the ETF takes every year. Add it to see what it costs you.',
     terHelp: 'It is the "product costs" line (in %) on your broker\'s costs and charges sheet, or the ongoing charges in the ETF\'s KID, usually between 0.05% and 0.50%.',
     terError: 'Enter a percentage between 0 and 5.',
     entrySubtitle: 'What your ETFs and brokerage cost you',
@@ -886,21 +893,28 @@ export default {
 
   returns: {
     title: 'Average yearly return',
-    lead: {
-      one: 'On average over 1 year:',
-      other: 'On average over {{count}} years:',
+    over: {
+      one: 'on average over 1 year',
+      other: 'on average over {{count}} years',
     },
     perYear: '{{value}} a year',
     years: {
       one: '1 year',
       other: '{{count}} years',
     },
-    since: 'Since {{year}}',
-    bestWorst: 'Best year: {{bestYear}} ({{best}}) · worst: {{worstYear}} ({{worst}})',
-    note: 'Price change in {{currency}}, over the available history (up to 13 years). For an accumulating ETF, dividends are already in the price; for a stock or a distributing ETF, they come on top. Past performance does not guarantee future results.',
-    indexTitle: 'Over the long run: {{index}}',
+    indexLine: {
+      one: 'Its index, {{index}}, over 1 year:',
+      other: 'Its index, {{index}}, over {{count}} years:',
+    },
+    info: 'How to read these figures',
+    note: 'Price change in {{currency}}. An accumulating ETF already includes its dividends; a stock or distributing ETF pays them on top. Past performance does not guarantee the future.',
     indexNoteTotal: 'Index in {{currency}}, dividends reinvested: what an accumulating ETF tracks, before its fees.',
     indexNotePrice: 'Index in {{currency}}, excluding dividends: an accumulating ETF does a little better, since it reinvests them.',
+  },
+
+  accountsSettings: {
+    title: 'Accounts and brokers',
+    subtitle: 'PEA, provider of each account, brokerage fees',
   },
 
   envelopes: {
@@ -908,6 +922,17 @@ export default {
     none: 'Not set',
     pickTitle: '{{account}} with…',
     hint: 'The logo shows on your accounts. If we know the institution\'s fee schedule, it is set automatically (unless you entered your own rule).',
+  },
+
+  about: {
+    section: 'About',
+    star: 'Star Patrimo on GitHub',
+    starSub: 'Free and open source. A star helps others find it.',
+    bug: 'Report a bug or suggest an idea',
+    bugSub: 'On GitHub, the forms tell you what to include.',
+    translate: 'Help translate',
+    translateSub: 'A clumsy sentence, or your language is missing?',
+    version: 'Patrimo {{version}} · open source, GPL-3.0',
   },
 
   demo: {
@@ -972,8 +997,8 @@ export default {
       one: 'With {{amount}} more a month, you would get there about {{count}} year sooner.',
       other: 'With {{amount}} more a month, you would get there about {{count}} years sooner.',
     },
-    assumptions: 'Assumptions, in today\'s euros (after inflation): {{mu}} average return a year and {{sigma}} volatility, based on your allocation (stocks 5%, crypto 5% but very volatile, cash 0%). These are probabilities, not promises.',
-    chartHint: 'The green line is the target capital: where your path crosses it (the green dot), your investments could pay for your lifestyle. The paler lines show one chance in ten above and below.',
+    assumptions: 'In today\'s euros: {{mu}} average return a year and {{sigma}} volatility (how much a year can swing up or down), based on your allocation. Probabilities, not promises.',
+    chartHint: 'Green line: the target capital. Where your path crosses it, your investments could pay for your lifestyle. Pale lines: a one-in-ten chance of doing better, or worse.',
     atAge: 'at {{age}}',
     likelyAge: '(at {{age}})',
   },
@@ -1347,9 +1372,10 @@ export default {
     title: 'Linked banks',
     entrySubtitle: 'Your account balances, updated automatically',
     introTitle: 'Up-to-date balances, no typing',
-    intro: 'Patrimo reads the name and balance of your accounts (not your transactions) through GoCardless, a PSD2-licensed service. You give consent on your bank\'s own site: Patrimo never sees your login. Each balance becomes an entry on your cash account, refreshed every 12 hours when you open the app.',
+    intro: 'Patrimo reads your account balances (not your transactions) through GoCardless, a licensed service. You consent on your bank\'s own site: Patrimo never sees your login. Balances refresh every 12 hours.',
     demo: 'Sample mode is on: bank linking is off. Switch back to your real data in settings to use it.',
     keys: {
+      closed: 'GoCardless has not accepted new accounts since July 2025: this only works if you already have one. Otherwise, enter your balances by hand.',
       title: 'GoCardless keys',
       steps: '1. Open the GoCardless Bank Account Data portal, then create a free account or sign in.\n2. Developers, then User secrets, then Create new: name it "Patrimo".\n3. Paste the Secret ID and Secret Key here (the key is shown only once).',
       portal: 'Open the GoCardless portal',

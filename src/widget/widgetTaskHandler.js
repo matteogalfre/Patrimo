@@ -8,6 +8,16 @@ import { createFxConverter } from '../core/fx';
 import { computeCash } from '../core/cash';
 import { formatTime } from '../utils/formatters';
 import { t, setLanguage, getDeviceLanguage, getLocaleTag } from '../i18n';
+import { loadPinHashSecure } from '../utils/pinSecurity';
+
+/** Un PIN protège l'app : le widget, visible de tous, masque alors les montants. */
+const hasPin = async () => {
+  try {
+    return !!(await loadPinHashSecure());
+  } catch {
+    return false;
+  }
+};
 
 const readSettings = async () => {
   try {
@@ -58,7 +68,16 @@ async function fetchPortfolioData() {
     ];
     const rates = await fxService.loadRates(base, currencies, first);
     const fx = createFxConverter({ base, ...rates });
-    const { totals } = computePortfolio({ transactions, dividends, quotes, fx });
+    const { totals, warnings } = computePortfolio({ transactions, dividends, quotes, fx });
+    // Un cours ou un taux manque (hors ligne, source muette) : le calcul
+    // compterait ces lignes au prix de revient ou à 0. Les derniers chiffres
+    // justes valent mieux.
+    // Seulement si le manque est nouveau : une ligne qu'aucune source ne cote
+    // ne doit pas figer le widget pour toujours.
+    const missing = [...warnings.missingQuotes, ...warnings.missingFx];
+    const cached = await readCache();
+    const knownMissing = new Set(cached?.missing || []);
+    if (cached && missing.some((x) => !knownMissing.has(x))) return cached;
     const cash = computeCash({ accounts: cashAccounts, fx });
     const totalValue = totals.value + cash.total;
     const previous = totalValue - totals.dailyChange;
@@ -72,8 +91,9 @@ async function fetchPortfolioData() {
       roi: totals.roi,
       currency: base,
       locale,
-      privacy: !!settings.privacyMode,
+      privacy: !!settings.privacyMode || (await hasPin()),
       lastUpdated: formatTime(now),
+      missing,
       timestamp: now.toISOString(),
     };
     await AsyncStorage.multiSet([
@@ -104,8 +124,8 @@ export async function widgetTaskHandler(props) {
         dailyChangePercent: data.dailyChangePercent || 0,
         currency: data.currency || 'EUR',
         locale: data.locale || 'fr-FR',
-        // L'écran d'accueil est visible de tous : le mode discret s'y applique aussi.
-        hideAmounts: !!data.privacy,
+        // L'écran d'accueil est visible de tous : le mode discret et le PIN s'y appliquent aussi.
+        hideAmounts: !!data.privacy || (await hasPin()),
       };
 
       if (widgetInfo.widgetName === 'PortfolioWidget') {

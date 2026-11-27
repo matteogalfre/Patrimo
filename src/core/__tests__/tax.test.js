@@ -55,6 +55,52 @@ describe('crypto (2086)', () => {
     expect(later.remainingAcquisition).toBeCloseTo(6000);
   });
 
+  test('frais de cession : déduits de la plus-value, pas de la fraction d\'acquisition', () => {
+    const transactions = [
+      tx('1', 'CRYPTO', 'crypto:BTC', 'buy', 1, 20000, '2024-01-01'),
+      tx('2', 'CRYPTO', 'crypto:BTC', 'sell', 0.5, 40000, '2025-02-01', 100),
+    ];
+    const r = computeCryptoTax({ transactions, fx, priceAt, year: 2025 });
+    // V = 40 000 (cours du marché) ; C brut 20 000 ; fraction = 20 000 × 20 000 / 40 000 = 10 000 ;
+    // plus-value = C net (19 900) − 10 000.
+    expect(r.sales[0].portfolioValue).toBeCloseTo(40000);
+    expect(r.sales[0].proceeds).toBeCloseTo(19900);
+    expect(r.sales[0].acquisitionShare).toBeCloseTo(10000);
+    expect(r.sales[0].gain).toBeCloseTo(9900);
+  });
+
+  test('prix de vente inconnu : clôture du jour, jamais une valeur négative', () => {
+    const transactions = [
+      tx('1', 'CRYPTO', 'crypto:ETH', 'buy', 2, 1000, '2024-01-01'),
+      tx('2', 'CRYPTO', 'crypto:ETH', 'sell', 1, 0, '2025-02-01', 5),
+    ];
+    const r = computeCryptoTax({ transactions, fx, priceAt, year: 2025 });
+    expect(r.sales[0].proceeds).toBeCloseTo(2000);
+    expect(r.sales[0].portfolioValue).toBeCloseTo(4000);
+    expect(r.sales[0].approximate).toBe(true);
+  });
+
+  test('taux de change manquant : la cession est signalée comme estimée', () => {
+    const transactions = [
+      tx('1', 'CTO', 'stock:X', 'buy', 1, 100, '2024-01-01', 0, 'JPY'),
+      tx('2', 'CTO', 'stock:X', 'sell', 1, 150, '2025-01-01', 0, 'JPY'),
+    ];
+    const r = computeCtoTax({ transactions, fx, year: 2025 });
+    expect(r.sales[0].estimated).toBe(true);
+  });
+
+  test('ligne soldée puis rachetée avec un prix connu : plus marquée estimée', () => {
+    const transactions = [
+      tx('1', 'CTO', 'stock:X', 'buy', 1, 0, '2024-01-01'),
+      tx('2', 'CTO', 'stock:X', 'sell', 1, 120, '2024-06-01'),
+      tx('3', 'CTO', 'stock:X', 'buy', 1, 100, '2025-01-01'),
+      tx('4', 'CTO', 'stock:X', 'sell', 1, 150, '2025-03-01'),
+    ];
+    const r = computeCtoTax({ transactions, fx, year: 2025 });
+    expect(r.sales[0].estimated).toBe(false);
+    expect(r.sales[0].gain).toBeCloseTo(50);
+  });
+
   test('cessions totales sous 305 € : exonérées', () => {
     const transactions = [
       tx('1', 'CRYPTO', 'crypto:BTC', 'buy', 1, 100, '2024-01-01'),

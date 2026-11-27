@@ -447,6 +447,7 @@ const BankConnectionsScreen = ({ navigation, route }) => {
           {ready && !hasKeys && (
             <View style={cardStyle}>
               <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('banks.keys.title')}</Text>
+              <Text style={[styles.sub, styles.closedNote, { color: theme.colors.warning }]}>{t('banks.keys.closed')}</Text>
               <Text style={[styles.sub, { color: theme.colors.textSecondary }]}>{t('banks.keys.steps')}</Text>
               <TouchableOpacity onPress={() => { tap(); WebBrowser.openBrowserAsync(PORTAL); }} style={styles.link} accessibilityRole="link">
                 <Text style={[styles.linkText, { color: theme.colors.primary }]}>{t('banks.keys.portal')}</Text>
@@ -603,6 +604,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
   cardTitle: { fontSize: 16, fontWeight: '700' },
   sub: { fontSize: 13, lineHeight: 19, marginTop: 8 },
+  closedNote: { marginBottom: 8 },
   noTop: { marginTop: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', gap: 12 },

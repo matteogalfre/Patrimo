@@ -24,6 +24,7 @@ export default {
     portfolio: 'Portfolio',
     add: 'Hinzufügen',
     settings: 'Einstellungen',
+    tools: 'Werkzeuge',
   },
 
   accounts: {
@@ -70,6 +71,12 @@ export default {
     legendValue: 'Wert',
     legendInvested: 'Investiertes Geld',
     priceUnavailable: 'Kein Kurs für {{symbols}} verfügbar: Bewertung zum Einstandspreis.',
+    staleQuotes: 'Offline: Kurse vom {{date}}, aktualisiert, sobald du wieder online bist.',
+    oversold: {
+      one: '1 Verkauf übersteigt die gehaltene Menge: Tippe, um ihn zu prüfen.',
+      other: '{{count}} Verkäufe übersteigen die gehaltene Menge: Tippe zum Prüfen.',
+    },
+    missingFx: 'Kein Wechselkurs für {{currencies}}: Diese Beträge zählen vorerst als 0.',
     pendingPrices: '{{count}} Transaktion(en) ohne Preis: vorläufig zum aktuellen Kurs bewertet, bis der Kursverlauf verfügbar ist.',
     noData: 'Füge deine erste Transaktion hinzu, um hier dein Vermögen zu sehen',
     chartLoading: 'Kursverlauf wird geladen…',
@@ -87,6 +94,7 @@ export default {
     title: 'Portfolio',
     holdings: 'Positionen',
     totalValue: 'Gesamtwert',
+    ofWhichCash: 'Anlagen {{invested}} · Liquidität {{cash}}',
     netInvested: 'Investiert',
     closed: 'Geschlossen',
     showClosed: {
@@ -377,7 +385,7 @@ export default {
       missed: 'Entgangener Gewinn, wenn diese {{amount}} {{count}} Jahre auf deinen Konten bleiben:',
       zero: 'Bewege den Regler, um zu sehen, was ein Teil deines Bargelds bringen würde.',
     },
-    note: 'Ausgangspunkt ist dein aktuelles Vermögen ({{start}}). Angenommene durchschnittliche Jahresrenditen, vor Steuern und Inflation: eine Projektion, keine Vorhersage.',
+    note: 'Ausgangspunkt ist dein heutiges Vermögen ({{start}}). In heutigen Euro: Renditen nach Inflation (Sparkonten gleichen sie ungefähr aus), vor Steuern. Dieselben Annahmen wie im Bildschirm Unabhängigkeit. Eine Hochrechnung, keine Prognose.',
     investedMonthly: 'Monatlich investiert',
     kept: 'Auf deinen Konten zurückgelegt',
     hintBudget: 'Laut deinem Budget: {{invest}} investiert zur gewählten Rendite und {{kept}}, die zum Zinssatz deiner Sparkonten auf deinen Konten bleiben.',
@@ -409,7 +417,7 @@ export default {
       portfolioShort: 'Portfolio {{amount}}',
       exempt: 'Steuerfrei: Verkäufe insgesamt unter {{amount}} im Jahr',
       formula: 'Gewinn = Verkaufspreis − Gesamtanschaffungskosten × Verkaufspreis ÷ Portfoliowert zum Zeitpunkt des Verkaufs.',
-      note: 'Es wird angenommen, dass gegen Euro verkauft wurde (ein Tausch zwischen Kryptos ist nicht steuerpflichtig). Der Portfoliowert nutzt die Tagesschlusskurse: Mit * markierte Zeilen sind Näherungswerte. Denk auch daran, deine Konten bei ausländischen Plattformen anzugeben (Formular 3916-bis).',
+      note: 'Verkäufe gelten als gegen Euro getätigt (ein Tausch zwischen Kryptos ist nicht steuerpflichtig). Mit * markierte Zeilen sind Näherungswerte. Konten bei ausländischen Plattformen: Formular 3916-bis.',
       empty: 'Keine Krypto-Verkäufe im Jahr {{year}}.',
     },
     pea: {
@@ -513,7 +521,6 @@ export default {
     biometric: 'Biometrische Entsperrung',
     biometricEnabledMsg: 'Biometrische Entsperrung aktiviert.',
 
-    tools: 'WERKZEUGE',
   },
 
   pinLock: {
@@ -571,7 +578,7 @@ export default {
     ter: 'Laufende Kosten (TER)',
     terLine: '{{value}} pro Jahr, etwa {{amount}}',
     terRangeLine: '{{range}} pro Jahr je nach Quelle, etwa {{amount}}',
-    terHint: 'Trage die TER ein, um zu sehen, was sie dich kostet',
+    terHint: 'Die TER sind die Kosten, die der ETF jedes Jahr einbehält. Trag sie ein, um zu sehen, was sie dich kosten.',
     terHelp: 'Das ist die Zeile „Produktkosten“ (in %) im Kosten-Ausweis deines Brokers oder die laufenden Kosten im Basisinformationsblatt des ETF, meist zwischen 0,05 % und 0,50 %.',
     terError: 'Gib einen Prozentsatz zwischen 0 und 5 ein.',
     entrySubtitle: 'Was dich deine ETFs und Ordergebühren kosten',
@@ -886,21 +893,28 @@ export default {
 
   returns: {
     title: 'Durchschnittliche Jahresrendite',
-    lead: {
-      one: 'Im Schnitt über 1 Jahr:',
-      other: 'Im Schnitt über {{count}} Jahre:',
+    over: {
+      one: 'im Schnitt über 1 Jahr',
+      other: 'im Schnitt über {{count}} Jahre',
     },
     perYear: '{{value}} pro Jahr',
     years: {
       one: '1 Jahr',
       other: '{{count}} Jahre',
     },
-    since: 'Seit {{year}}',
-    bestWorst: 'Bestes Jahr: {{bestYear}} ({{best}}) · schlechtestes: {{worstYear}} ({{worst}})',
-    note: 'Kursentwicklung in {{currency}} über die verfügbare Historie (bis zu 13 Jahre). Bei einem thesaurierenden ETF stecken die Dividenden schon im Kurs; bei einer Aktie oder einem ausschüttenden ETF kommen sie hinzu. Vergangene Wertentwicklungen sind keine Garantie für die Zukunft.',
-    indexTitle: 'Langfristig: {{index}}',
+    indexLine: {
+      one: 'Sein Index, {{index}}, über 1 Jahr:',
+      other: 'Sein Index, {{index}}, über {{count}} Jahre:',
+    },
+    info: 'So liest du diese Zahlen',
+    note: 'Kursentwicklung in {{currency}}. Ein thesaurierender ETF enthält seine Dividenden schon; eine Aktie oder ein ausschüttender ETF zahlt sie zusätzlich. Vergangene Wertentwicklung ist keine Garantie für die Zukunft.',
     indexNoteTotal: 'Index in {{currency}}, Dividenden reinvestiert: das bildet ein thesaurierender ETF ab, vor Kosten.',
     indexNotePrice: 'Index in {{currency}}, ohne Dividenden: Ein thesaurierender ETF schneidet etwas besser ab, da er sie reinvestiert.',
+  },
+
+  accountsSettings: {
+    title: 'Konten und Broker',
+    subtitle: 'PEA, Anbieter jedes Kontos, Ordergebühren',
   },
 
   envelopes: {
@@ -908,6 +922,17 @@ export default {
     none: 'Nicht angegeben',
     pickTitle: '{{account}} bei…',
     hint: 'Das Logo erscheint auf deinen Konten. Kennen wir das Gebührenmodell des Instituts, wird es automatisch gesetzt (außer du hast eine eigene Regel eingegeben).',
+  },
+
+  about: {
+    section: 'Über',
+    star: 'Auf GitHub einen Stern geben',
+    starSub: 'Frei und kostenlos. Ein Stern hilft anderen, es zu finden.',
+    bug: 'Fehler melden oder Idee vorschlagen',
+    bugSub: 'Auf GitHub sagen die Formulare, was rein soll.',
+    translate: 'Beim Übersetzen helfen',
+    translateSub: 'Ein holpriger Satz, oder fehlt deine Sprache?',
+    version: 'Patrimo {{version}} · freie Software, GPL-3.0',
   },
 
   demo: {
@@ -972,8 +997,8 @@ export default {
       one: 'Mit {{amount}} mehr pro Monat wärst du etwa {{count}} Jahr früher am Ziel.',
       other: 'Mit {{amount}} mehr pro Monat wärst du etwa {{count}} Jahre früher am Ziel.',
     },
-    assumptions: 'Annahmen in heutigen Euro (nach Inflation): {{mu}} durchschnittliche Rendite pro Jahr und {{sigma}} Volatilität, nach deiner Aufteilung (Aktien 5 %, Krypto 5 % aber sehr schwankend, Bargeld 0 %). Das sind Wahrscheinlichkeiten, keine Versprechen.',
-    chartHint: 'Die grüne Linie ist das Zielkapital: Wo dein Verlauf sie kreuzt (der grüne Punkt), könnten deine Anlagen deinen Lebensstil bezahlen. Die blasseren Linien zeigen eine Chance von zehn darüber und darunter.',
+    assumptions: 'In heutigen Euro: {{mu}} durchschnittliche Rendite pro Jahr und {{sigma}} Volatilität (wie stark ein Jahr schwanken kann), nach deiner Aufteilung. Wahrscheinlichkeiten, keine Versprechen.',
+    chartHint: 'Grüne Linie: das Zielkapital. Wo dein Verlauf sie kreuzt, könnten deine Anlagen deinen Lebensstil bezahlen. Blasse Linien: eine Chance von zehn, besser oder schlechter abzuschneiden.',
     atAge: 'mit {{age}}',
     likelyAge: '(mit {{age}})',
   },
@@ -1347,9 +1372,10 @@ export default {
     title: 'Verbundene Banken',
     entrySubtitle: 'Deine Kontostände, automatisch aktualisiert',
     introTitle: 'Aktuelle Kontostände ohne Abtippen',
-    intro: 'Patrimo liest Name und Saldo deiner Konten (nicht deine Umsätze) über GoCardless, einen nach PSD2 zugelassenen Dienst. Du stimmst auf der Seite deiner Bank zu: Patrimo sieht deine Zugangsdaten nie. Jeder gelesene Saldo wird zu einem Eintrag auf deinem Liquiditätskonto und wird alle 12 Stunden beim Öffnen der App neu gelesen.',
+    intro: 'Patrimo liest die Salden deiner Konten (nicht deine Umsätze) über GoCardless, einen zugelassenen Dienst. Du stimmst auf der Seite deiner Bank zu: Patrimo sieht deine Zugangsdaten nie. Salden werden alle 12 Stunden neu gelesen.',
     demo: 'Beispielmodus aktiv: Die Bankverbindung ist ausgeschaltet. Wechsle in den Einstellungen zurück zu deinen echten Daten, um sie zu nutzen.',
     keys: {
+      closed: 'GoCardless nimmt seit Juli 2025 keine neuen Konten mehr an: Das funktioniert nur, wenn du dort schon ein Konto hast. Sonst trag deine Salden von Hand ein.',
       title: 'GoCardless-Schlüssel',
       steps: '1. Öffne das Portal GoCardless Bank Account Data und erstelle ein kostenloses Konto oder melde dich an.\n2. Developers, dann User secrets, dann Create new: nenne ihn „Patrimo“.\n3. Füge hier Secret ID und Secret Key ein (der Schlüssel wird nur einmal angezeigt).',
       portal: 'GoCardless-Portal öffnen',

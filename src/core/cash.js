@@ -10,6 +10,7 @@
 
 import { minimumRate, officialRate } from './regulatedRates';
 import { formatDateKey } from '../utils/formatters';
+import { normalizeNumber } from '../utils/parseNumber';
 
 // `peaCash`, `ctoCash` : l'argent non investi qui attend sur le PEA ou le
 // compte-titres (un dividende pas encore réinvesti…). `broker` est l'ancien
@@ -44,7 +45,7 @@ export const availableCash = (accounts = []) => accounts
 
 const toNum = (v) => {
   if (v === null || v === undefined || v === '') return null;
-  const n = Number(typeof v === 'string' ? v.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.') : v);
+  const n = Number(typeof v === 'string' ? normalizeNumber(v, 'fr-FR') : v);
   return Number.isFinite(n) ? n : null;
 };
 

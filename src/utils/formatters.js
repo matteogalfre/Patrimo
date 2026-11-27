@@ -19,6 +19,7 @@ let displayLocale = DEFAULT_LOCALE;
 export const setDisplayLocale = (locale) => {
   displayLocale = locale || DEFAULT_LOCALE;
 };
+export const getDisplayLocale = () => displayLocale;
 
 /**
  * Formate une date selon différents formats.

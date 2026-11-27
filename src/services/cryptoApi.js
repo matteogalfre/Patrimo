@@ -5,6 +5,11 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchWithRetry } from './apiClient';
+
+// Cours du moment : une réponse rapide ou rien (le dernier cours connu prend le
+// relais), pour que l'écran et le widget n'attendent pas une minute.
+const QUOTE_REQUEST = { timeoutMs: 8000 };
+const QUOTE_RETRIES = 1;
 import { formatDateKey } from '../utils/formatters';
 import { STORAGE_KEYS, BINANCE_PAIRS_TTL } from '../constants';
 
@@ -54,7 +59,9 @@ const fetchPerSymbol = async (symbols, endpoint, extract) => {
   const settled = await Promise.allSettled(
     symbols.map(async (symbol) => {
       const data = await fetchWithRetry(
-        `${BINANCE_BASE_URL}/${endpoint}?symbol=${getBinancePair(symbol)}`
+        `${BINANCE_BASE_URL}/${endpoint}?symbol=${getBinancePair(symbol)}`,
+        QUOTE_REQUEST,
+        QUOTE_RETRIES,
       );
       return { symbol, value: extract(data) };
     })
@@ -126,7 +133,9 @@ export const priceService = {
     try {
       const pairs = quotable.map(s => `"${getBinancePair(s)}"`).join(',');
       const data = await fetchWithRetry(
-        `${BINANCE_BASE_URL}/ticker/price?symbols=[${pairs}]`
+        `${BINANCE_BASE_URL}/ticker/price?symbols=[${pairs}]`,
+        QUOTE_REQUEST,
+        QUOTE_RETRIES,
       );
 
       if (Array.isArray(data)) {

@@ -27,6 +27,7 @@ import { availableCash } from '../core/cash';
 import { classify } from '../core/exposure';
 import { emergencyMonths, profileTargets } from '../core/profile';
 import { formatDate, formatPercent } from '../utils/formatters';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const PERIODS = [{ key: '3m', n: 65 }, { key: '6m', n: 130 }, { key: '1y', n: 260 }];
 const SPREAD_MONTHS = [3, 6, 12];
@@ -143,7 +144,7 @@ const MarketsScreen = ({ navigation, route }) => {
   // --- Plan anti-panique ------------------------------------------------------
   const rule = marketRules?.[id] || null;
   const saveRule = () => {
-    const amount = Number(String(ruleAmount).replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
+    const amount = Number(normalizeNumber(ruleAmount));
     const threshold = ruleStep || market.ruleSteps[0];
     if (!(amount > 0)) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

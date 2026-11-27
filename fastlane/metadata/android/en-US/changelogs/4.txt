@@ -1,0 +1,1 @@
+Tools tab, clearer asset returns, prices kept offline, full Clear all, data excluded from Android backups, many fixes.

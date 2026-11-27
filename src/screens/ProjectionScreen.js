@@ -31,9 +31,10 @@ import { usePlanning } from '../context/PlanningContext';
 import { LineChartSkia } from '../components/charts';
 import SegmentedControl from '../components/SegmentedControl';
 import Slider from '../components/Slider';
-import { averageCashRate, projectPortfolio, SCENARIOS } from '../core/projection';
+import { averageCashRate, projectPortfolio, realRate, SCENARIOS } from '../core/projection';
 import { useMyNumbers } from '../hooks/useMyNumbers';
 import { formatPercent } from '../utils/formatters';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 32 - 32;
@@ -84,13 +85,15 @@ const ProjectionScreen = ({ navigation }) => {
   const [share, setShare] = useState(50);
   const [cashYears, setCashYears] = useState(10);
   const [spread, setSpread] = useState(12);
+  const [showCashSim, setShowCashSim] = useState(false);
 
-  const monthly = Math.max(0, Number(String(monthlyInput).replace(/\s/g, '').replace(',', '.')) || 0);
-  const monthlyCash = Math.max(0, Number(String(keptInput).replace(/\s/g, '').replace(',', '.')) || 0);
+  const monthly = Math.max(0, Number(normalizeNumber(monthlyInput)) || 0);
+  const monthlyCash = Math.max(0, Number(normalizeNumber(keptInput)) || 0);
   const start = Math.max(0, overview.value);
   const invested = Math.max(0, overview.investedValue ?? overview.value - cash.total);
+  // Taux affiché : celui des livrets. Taux projeté : après inflation, comme les placements.
   const cashRate = averageCashRate(cash.total, cash.yearlyInterest);
-  const base = { invested, cash: cash.total, monthly, monthlyCash, years, cashRate };
+  const base = { invested, cash: cash.total, monthly, monthlyCash, years, cashRate: realRate(cashRate) };
 
   const results = useMemo(() => Object.fromEntries(
     Object.entries(SCENARIOS).map(([key, rate]) => [key, projectPortfolio({ ...base, annualRate: rate })]),
@@ -253,7 +256,15 @@ const ProjectionScreen = ({ navigation }) => {
 
           {cash.total > 0 && (
             <View style={cardStyle}>
-              <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{t('projection.cash.title')}</Text>
+              <TouchableOpacity
+                style={styles.cashHead}
+                onPress={() => setShowCashSim((v) => !v)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: showCashSim }}
+              >
+                <Text style={[styles.cardTitle, styles.cashTitle, { color: theme.colors.text }]}>{t('projection.cash.title')}</Text>
+                <Ionicons name={showCashSim ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.textTertiary} />
+              </TouchableOpacity>
               <Text style={[styles.sub, styles.cardIntro, { color: theme.colors.textSecondary }]}>
                 {cashRate > 0
                   ? t('projection.cash.intro', {
@@ -263,6 +274,8 @@ const ProjectionScreen = ({ navigation }) => {
                   : t('projection.cash.introNoRate', { amount: formatAmount(cash.total, { decimals: 0 }) })}
               </Text>
 
+              {/* Un second simulateur, ouvert seulement si on le demande. */}
+              {showCashSim && (<>
               {moved > 0 ? (
                 <>
                   <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
@@ -376,6 +389,7 @@ const ProjectionScreen = ({ navigation }) => {
                 </View>
               )}
               <Text style={[styles.hint, { color: theme.colors.textTertiary }]}>{t('projection.cash.safety')}</Text>
+              </>)}
             </View>
           )}
 
@@ -396,6 +410,8 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40 },
   card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12 },
   cardTitle: { fontSize: 16, fontWeight: '700' },
+  cashHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  cashTitle: { flex: 1 },
   cardIntro: { marginBottom: 14, lineHeight: 18 },
   scenarioRows: { marginTop: 4, gap: 4 },
   scenarioRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

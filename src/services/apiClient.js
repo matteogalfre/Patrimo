@@ -34,6 +34,23 @@ const getExponentialDelay = (attempt, baseDelay = LIMITS.API_RETRY_DELAY) => {
  */
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Attente maximale demandée par un serveur saturé : au-delà, l'écran ou le
+// widget resterait bloqué ; on réessaie plus tôt et on abandonne s'il le faut.
+const MAX_RETRY_AFTER = 10000;
+
+/**
+ * Délai d'un en-tête Retry-After : un nombre de secondes ou une date HTTP.
+ * @returns {number|null} en ms, borné ; null si l'en-tête est absent ou illisible
+ */
+export const retryAfterMs = (header, now = Date.now()) => {
+  if (!header) return null;
+  const secs = Number(header);
+  let ms = Number.isFinite(secs) ? secs * 1000 : new Date(header).getTime() - now;
+  if (!Number.isFinite(ms)) return null;
+  ms = Math.max(0, ms);
+  return Math.min(ms, MAX_RETRY_AFTER);
+};
+
 /**
  * Effectue une requête avec retry automatique
  * @param {string} url - URL de la requête
@@ -59,8 +76,7 @@ export async function fetchWithRetry(url, options = {}, maxRetries = LIMITS.API_
 
       // Rate limited - attendre et réessayer
       if (response.status === 429) {
-        const retryAfter = response.headers.get('Retry-After');
-        const delay = retryAfter ? parseInt(retryAfter) * 1000 : getExponentialDelay(attempt, 2000);
+        const delay = retryAfterMs(response.headers.get('Retry-After')) ?? getExponentialDelay(attempt, 2000);
         
         if (attempt < maxRetries) {
           if (__DEV__) console.warn(`[API] Rate limited, retry dans ${delay}ms...`);

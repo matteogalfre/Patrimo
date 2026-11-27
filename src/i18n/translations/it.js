@@ -24,6 +24,7 @@ export default {
     portfolio: 'Portafoglio',
     add: 'Aggiungi',
     settings: 'Impostazioni',
+    tools: 'Strumenti',
   },
 
   accounts: {
@@ -70,6 +71,12 @@ export default {
     legendValue: 'Valore',
     legendInvested: 'Denaro investito',
     priceUnavailable: 'Quotazione non disponibile per {{symbols}}: valorizzazione al prezzo di carico.',
+    staleQuotes: 'Offline: prezzi del {{date}}, aggiornati al ritorno della rete.',
+    oversold: {
+      one: '1 vendita supera la quantità detenuta: tocca per controllarla.',
+      other: '{{count}} vendite superano la quantità detenuta: tocca per controllare.',
+    },
+    missingFx: 'Nessun tasso di cambio per {{currencies}}: questi importi valgono 0 per ora.',
     pendingPrices: '{{count}} operazione/i senza prezzo: valutata/e alla quotazione attuale in attesa dello storico.',
     noData: 'Aggiungi la tua prima operazione per vedere qui il tuo patrimonio',
     chartLoading: 'Caricamento dello storico…',
@@ -87,6 +94,7 @@ export default {
     title: 'Portafoglio',
     holdings: 'Posizioni',
     totalValue: 'Valore totale',
+    ofWhichCash: 'Investimenti {{invested}} · liquidità {{cash}}',
     netInvested: 'Investito',
     closed: 'Chiusa',
     showClosed: {
@@ -377,7 +385,7 @@ export default {
       missed: 'Mancato guadagno se questi {{amount}} restano sui tuoi conti per {{count}} anni:',
       zero: 'Sposta il cursore per vedere quanto renderebbe una parte della tua liquidità.',
     },
-    note: 'Parte dal tuo patrimonio attuale ({{start}}). Rendimenti annui medi ipotizzati, al lordo di tasse e inflazione: una proiezione, non una previsione.',
+    note: 'Parte dal tuo patrimonio attuale ({{start}}). In euro di oggi: rendimenti al netto dell\'inflazione (i libretti la seguono più o meno), prima delle tasse. Stesse ipotesi della schermata Indipendenza. Una proiezione, non una previsione.',
     investedMonthly: 'Investito ogni mese',
     kept: 'Messo da parte sui tuoi conti',
     hintBudget: 'Dal tuo budget: {{invest}} investiti al rendimento scelto e {{kept}} che restano sui tuoi conti al tasso dei tuoi conti deposito.',
@@ -409,7 +417,7 @@ export default {
       portfolioShort: 'portafoglio {{amount}}',
       exempt: 'Esente: cessioni totali inferiori a {{amount}} nell\'anno',
       formula: 'Plusvalenza = prezzo di cessione − prezzo totale di acquisto × prezzo di cessione ÷ valore del portafoglio al momento della cessione.',
-      note: 'Si presume che le vendite siano fatte contro euro (uno scambio tra cripto non è tassabile). Il valore del portafoglio usa i prezzi di chiusura del giorno: le righe contrassegnate con * sono approssimative. Ricordati anche di dichiarare i tuoi conti su piattaforme estere (modulo 3916-bis).',
+      note: 'Si presume che le vendite siano contro euro (uno scambio tra cripto non è tassabile). Righe con *: approssimative. Conti su piattaforme estere: modulo 3916-bis.',
       empty: 'Nessuna vendita di cripto nel {{year}}.',
     },
     pea: {
@@ -513,7 +521,6 @@ export default {
     biometric: 'Sblocco biometrico',
     biometricEnabledMsg: 'Sblocco biometrico attivato.',
 
-    tools: 'STRUMENTI',
   },
 
   pinLock: {
@@ -571,7 +578,7 @@ export default {
     ter: 'Costi annui (TER)',
     terLine: '{{value}} all\'anno, circa {{amount}}',
     terRangeLine: '{{range}} all\'anno secondo le fonti, circa {{amount}}',
-    terHint: 'Aggiungi il TER per vedere quanto ti costa',
+    terHint: 'Il TER sono i costi che l\'ETF trattiene ogni anno. Aggiungilo per vedere quanto ti costa.',
     terHelp: 'È la riga «costi del prodotto» (in %) del prospetto costi e oneri del tuo broker, o le spese correnti del KID dell\'ETF, di solito tra lo 0,05 % e lo 0,50 %.',
     terError: 'Inserisci una percentuale tra 0 e 5.',
     entrySubtitle: 'Quanto ti costano ETF e commissioni',
@@ -886,21 +893,28 @@ export default {
 
   returns: {
     title: 'Rendimento medio annuo',
-    lead: {
-      one: 'In media su 1 anno:',
-      other: 'In media su {{count}} anni:',
+    over: {
+      one: 'in media su 1 anno',
+      other: 'in media su {{count}} anni',
     },
     perYear: '{{value}} all\'anno',
     years: {
       one: '1 anno',
       other: '{{count}} anni',
     },
-    since: 'Dal {{year}}',
-    bestWorst: 'Anno migliore: {{bestYear}} ({{best}}) · peggiore: {{worstYear}} ({{worst}})',
-    note: 'Andamento del prezzo in {{currency}}, sullo storico disponibile (fino a 13 anni). Per un ETF ad accumulazione i dividendi sono già nel prezzo; per un\'azione o un ETF a distribuzione si aggiungono. I rendimenti passati non garantiscono quelli futuri.',
-    indexTitle: 'Nel lungo periodo: {{index}}',
+    indexLine: {
+      one: 'Il suo indice, {{index}}, su 1 anno:',
+      other: 'Il suo indice, {{index}}, su {{count}} anni:',
+    },
+    info: 'Come leggere queste cifre',
+    note: 'Andamento del prezzo in {{currency}}. Un ETF ad accumulazione include già i dividendi; un\'azione o un ETF a distribuzione li paga in più. Il passato non garantisce il futuro.',
     indexNoteTotal: 'Indice in {{currency}}, dividendi reinvestiti: è ciò che replica un ETF ad accumulazione, prima dei costi.',
     indexNotePrice: 'Indice in {{currency}}, senza dividendi: un ETF ad accumulazione fa un po\' meglio, perché li reinveste.',
+  },
+
+  accountsSettings: {
+    title: 'Conti e broker',
+    subtitle: 'PEA, istituto di ogni conto, commissioni di intermediazione',
   },
 
   envelopes: {
@@ -908,6 +922,17 @@ export default {
     none: 'Non indicato',
     pickTitle: '{{account}} presso…',
     hint: 'Il logo compare sui tuoi conti. Se conosciamo la tariffa dell\'istituto, si imposta da sola (salvo se hai inserito una tua regola).',
+  },
+
+  about: {
+    section: 'Informazioni',
+    star: 'Lascia una stella su GitHub',
+    starSub: 'Libero e gratuito. Una stella aiuta altri a trovarlo.',
+    bug: 'Segnala un bug o proponi un\'idea',
+    bugSub: 'Su GitHub, i moduli indicano cosa includere.',
+    translate: 'Aiuta a tradurre',
+    translateSub: 'Una frase goffa, o manca la tua lingua?',
+    version: 'Patrimo {{version}} · software libero, GPL-3.0',
   },
 
   demo: {
@@ -972,8 +997,8 @@ export default {
       one: 'Con {{amount}} in più al mese, ci arriveresti circa {{count}} anno prima.',
       other: 'Con {{amount}} in più al mese, ci arriveresti circa {{count}} anni prima.',
     },
-    assumptions: 'Ipotesi, in euro di oggi (al netto dell\'inflazione): {{mu}} di rendimento medio annuo e {{sigma}} di volatilità, secondo la tua ripartizione (azioni 5 %, cripto 5 % ma molto volatile, liquidità 0 %). Sono probabilità, non promesse.',
-    chartHint: 'La linea verde è il capitale obiettivo: dove la tua traiettoria la incrocia (il punto verde), i tuoi investimenti potrebbero pagare il tuo tenore di vita. Le linee più chiare mostrano una probabilità su dieci sopra e sotto.',
+    assumptions: 'In euro di oggi: {{mu}} di rendimento medio annuo e {{sigma}} di volatilità (quanto può oscillare un anno), secondo la tua ripartizione. Probabilità, non promesse.',
+    chartHint: 'Linea verde: il capitale obiettivo. Dove la tua traiettoria la incrocia, i tuoi investimenti potrebbero pagare il tuo tenore di vita. Linee chiare: una probabilità su dieci di fare meglio, o peggio.',
     atAge: 'a {{age}} anni',
     likelyAge: '(a {{age}} anni)',
   },
@@ -1347,9 +1372,10 @@ export default {
     title: 'Banche collegate',
     entrySubtitle: 'I saldi dei tuoi conti, aggiornati da soli',
     introTitle: 'Saldi aggiornati, senza digitarli',
-    intro: 'Patrimo legge il nome e il saldo dei tuoi conti (non i movimenti) tramite GoCardless, un servizio autorizzato PSD2. Dai il consenso sul sito della tua banca: Patrimo non vede mai le tue credenziali. Ogni saldo letto diventa una registrazione sul tuo conto di liquidità, riletta ogni 12 ore all\'apertura dell\'app.',
+    intro: 'Patrimo legge il saldo dei tuoi conti (non i movimenti) tramite GoCardless, un servizio autorizzato. Dai il consenso sul sito della tua banca: Patrimo non vede mai le tue credenziali. Saldi riletti ogni 12 ore.',
     demo: 'Modalità esempio attiva: il collegamento bancario è disattivato. Torna ai tuoi dati reali nelle impostazioni per usarlo.',
     keys: {
+      closed: 'GoCardless non accetta nuovi account da luglio 2025: funziona solo se ne hai già uno. Altrimenti, inserisci i saldi a mano.',
       title: 'Chiavi GoCardless',
       steps: '1. Apri il portale GoCardless Bank Account Data e crea un account gratuito o accedi.\n2. Developers, poi User secrets, poi Create new: chiamala «Patrimo».\n3. Incolla qui il Secret ID e la Secret Key (la chiave viene mostrata una sola volta).',
       portal: 'Apri il portale GoCardless',

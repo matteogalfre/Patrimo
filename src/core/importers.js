@@ -16,13 +16,14 @@ import {
 import { normalizeCashAccount } from './cash';
 import { normalizeLoan } from './loans';
 import { normalizeProperty } from './realEstate';
+import { normalizeNumber } from '../utils/parseNumber';
 
 export const BACKUP_APP_NAME = 'Patrimo';
 export const BACKUP_FORMAT_VERSION = 1;
 
 const toNum = (v) => {
   if (v === null || v === undefined || v === '') return null;
-  const n = Number(typeof v === 'string' ? v.replace(',', '.') : v);
+  const n = Number(typeof v === 'string' ? normalizeNumber(v, 'fr-FR') : v);
   return Number.isFinite(n) ? n : null;
 };
 

@@ -20,9 +20,10 @@ import { useMyNumbers } from '../hooks/useMyNumbers';
 import { availableCash } from '../core/cash';
 import { DEFAULT_INSURANCE, DEFAULT_RATES, MAX_DEBT_RATIO, maxPurchase, simulatePurchase } from '../core/realEstate';
 import { formatPercent } from '../utils/formatters';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const parseNum = (s) => {
-  const n = Number(String(s ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
+  const n = Number(normalizeNumber(s ?? ''));
   return Number.isFinite(n) ? n : null;
 };
 const YEARS = [15, 20, 25];

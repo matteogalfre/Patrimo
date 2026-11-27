@@ -29,22 +29,18 @@ import { useSettings } from '../context/SettingsContext';
 import { usePlanning } from '../context/PlanningContext';
 import { useBank } from '../context/BankContext';
 import { useMarketWatch } from '../hooks/useMarketWatch';
-import { scoreProfile } from '../core/profile';
 import { findInstitution } from '../core/institutions';
-import { budgetTotals } from '../core/budget';
 import { MetricCardSkeleton, ChartSkeleton } from '../components';
 import AllocationChart from '../components/AllocationChart';
 import AssetLogo from '../components/AssetLogo';
 import ChangeBadge from '../components/ChangeBadge';
 import SegmentedControl from '../components/SegmentedControl';
 import PeaCard from '../components/PeaCard';
-import ToolsCard from '../components/Dashboard/ToolsCard';
 import DuePlansCard from '../components/Dashboard/DuePlansCard';
 import DueDividendsCard from '../components/Dashboard/DueDividendsCard';
 import YearlyPerformanceCard from '../components/Dashboard/YearlyPerformanceCard';
 import { annualizedReturn } from '../core/performance';
 import { averageCashRate } from '../core/projection';
-import { computeExposure } from '../core/exposure';
 import { AccountFilter, CashRow, InflationCard } from '../components/Portfolio';
 import NetworkStatus, { ErrorBanner, SyncStatus } from '../components/NetworkStatus';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
@@ -68,6 +64,7 @@ const DashboardScreen = ({ navigation }) => {
     overview,
     cash,
     warnings,
+    quotesAsOf,
     pea,
     isLoading,
     isRefreshing,
@@ -76,7 +73,6 @@ const DashboardScreen = ({ navigation }) => {
     lastUpdated,
     getChartData,
     getSparkline,
-    income,
     transactions,
     dividends,
     fx,
@@ -93,6 +89,7 @@ const DashboardScreen = ({ navigation }) => {
   const [scrubIndex, setScrubIndex] = useState(null);
   // Ligne « argent investi » sur demande : deux courbes proches se chevauchent.
   const [showInvested, setShowInvested] = useState(false);
+  const [showPnlDetail, setShowPnlDetail] = useState(false);
   const onScrub = useCallback((i) => setScrubIndex(i >= 0 ? i : null), []);
 
   const isCash = account === ACCOUNTS.CASH;
@@ -194,20 +191,8 @@ const DashboardScreen = ({ navigation }) => {
     };
   }, [isCash, account, totals, transactions, dividends, fx, inflation]);
 
-  // Résumé de la diversification pour l'accès « Planifier » : premier pays, premier secteur.
-  const { exposure: exposureOverrides, profile, budget, hydrated, onboarded, setOnboarded } = usePlanning();
-  const diversificationSummary = useMemo(() => {
-    const e = computeExposure(assets.filter((a) => a.isHeld), exposureOverrides);
-    const country = e.countries.find((x) => x.key !== 'OTHER');
-    const sector = e.sectors[0];
-    if (!country || !sector) return t('diversification.entrySubtitle');
-    return t('diversification.summary', {
-      country: `${formatPercent(country.pct, { showSign: false, decimals: 0 })} ${t(`countries.${country.key}`)}`,
-      sector: `${formatPercent(sector.pct, { showSign: false, decimals: 0 })} ${t(`sectors.${sector.key}`)}`,
-    });
-  }, [assets, exposureOverrides, t]);
+  const { profile, hydrated, onboarded, setOnboarded } = usePlanning();
 
-  // Deux cartes : ce qui analyse le patrimoine actuel, ce qui prépare la suite.
   // Marchés : une carte quand le S&P 500 ou le Bitcoin reculent nettement,
   // et le plan anti-panique vérifié à l'ouverture.
   const marketStates = useMarketWatch();
@@ -217,46 +202,6 @@ const DashboardScreen = ({ navigation }) => {
       ? m.state.change1d <= -0.05 || m.state.change5d <= -0.1
       : m.state.change1d <= -0.02 || m.state.change5d <= -0.04))
     .map(([mid, m]) => ({ id: mid, ...m }));
-
-  const analyzeTools = useMemo(() => [
-    { route: 'Markets', icon: 'pulse-outline', title: t('markets.title'), subtitle: t('markets.entrySubtitle') },
-    {
-      route: 'PassiveIncome',
-      icon: 'cash-outline',
-      title: t('income.title'),
-      subtitle: income.upcoming?.items.length
-        ? t('income.nextShort', { name: income.upcoming.items[0].name, month: t('months.long')[new Date(income.upcoming.items[0].date).getMonth()] })
-        : income.projected > 0 ? t('income.summary', { amount: formatAmount(income.projected, { decimals: 0 }) }) : null,
-    },
-    { route: 'Diversification', icon: 'globe-outline', title: t('diversification.title'), subtitle: diversificationSummary },
-    { route: 'Fees', icon: 'receipt-outline', title: t('fees.title'), subtitle: t('fees.entrySubtitle') },
-    { route: 'Benchmark', icon: 'git-compare-outline', title: t('benchmark.title'), subtitle: t('benchmark.entrySubtitle') },
-    { route: 'Tax', icon: 'document-text-outline', title: t('tax.title'), subtitle: t('tax.entrySubtitle') },
-  ], [t, income.projected, income.upcoming, formatAmount, diversificationSummary]);
-
-  const planTools = useMemo(() => [
-    {
-      route: 'Profile',
-      icon: 'compass-outline',
-      title: t('profile.title'),
-      subtitle: profile ? t('profile.entryDone', { name: t(`profile.names.${scoreProfile(profile.answers).profile}`) }) : t('profile.entrySubtitle'),
-    },
-    {
-      route: 'Budget',
-      icon: 'git-network-outline',
-      title: t('budget.title'),
-      subtitle: budget
-        ? t('budget.entryRate', { rate: formatPercent(budgetTotals(budget).savingsRate, { showSign: false, decimals: 0 }) })
-        : t('budget.entrySubtitle'),
-    },
-    { route: 'Projection', icon: 'trending-up', title: t('projection.title'), subtitle: t('projection.entrySubtitle') },
-    { route: 'Independence', icon: 'sunny-outline', title: t('independence.title'), subtitle: t('independence.entrySubtitle') },
-    { route: 'Goals', icon: 'flag-outline', title: t('goals.title'), subtitle: t('goals.entrySubtitle') },
-    { route: 'Rebalance', icon: 'pie-chart-outline', title: t('rebalance.title'), subtitle: t('rebalance.entrySubtitle') },
-    { route: 'Plans', icon: 'repeat-outline', title: t('plans.title'), subtitle: t('plans.entrySubtitle') },
-    { route: 'Wealth', icon: 'home-outline', title: t('wealth.title'), subtitle: t('wealth.entrySubtitle') },
-    { route: 'HomeBuy', icon: 'calculator-outline', title: t('homeBuy.title'), subtitle: t('homeBuy.entrySubtitle') },
-  ], [t, profile, budget]);
 
   const missingSymbols = useMemo(
     () => warnings.missingQuotes.map((id) => id.split(':')[1]).join(', '),
@@ -366,6 +311,38 @@ const DashboardScreen = ({ navigation }) => {
             <Ionicons name="alert-circle-outline" size={16} color={theme.colors.warning} />
             <Text style={[styles.noticeText, { color: theme.colors.text }]}>
               {t('dashboard.priceUnavailable', { symbols: missingSymbols })}
+            </Text>
+          </View>
+        )}
+        {quotesAsOf && (
+          <View style={[styles.notice, { backgroundColor: theme.colors.warningBg }]} accessibilityRole="alert">
+            <Ionicons name="cloud-offline-outline" size={16} color={theme.colors.warning} />
+            <Text style={[styles.noticeText, { color: theme.colors.text }]}>
+              {t('dashboard.staleQuotes', { date: formatDate(quotesAsOf, { locale, format: 'full' }) })}
+            </Text>
+          </View>
+        )}
+        {warnings.oversold.length > 0 && (
+          <TouchableOpacity
+            style={[styles.notice, { backgroundColor: theme.colors.warningBg }]}
+            onPress={() => {
+              // Vers l'actif de la première vente en trop : c'est là qu'on la corrige.
+              const tx = transactions.find((x) => x.id === warnings.oversold[0]);
+              if (tx) navigation.navigate('AssetDetail', { assetId: tx.assetId, account: tx.account || null });
+            }}
+            accessibilityRole="button"
+          >
+            <Ionicons name="alert-circle-outline" size={16} color={theme.colors.warning} />
+            <Text style={[styles.noticeText, { color: theme.colors.text }]}>
+              {t('dashboard.oversold', { count: warnings.oversold.length })}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {warnings.missingFx.length > 0 && (
+          <View style={[styles.notice, { backgroundColor: theme.colors.warningBg }]} accessibilityRole="alert">
+            <Ionicons name="swap-horizontal-outline" size={16} color={theme.colors.warning} />
+            <Text style={[styles.noticeText, { color: theme.colors.text }]}>
+              {t('dashboard.missingFx', { currencies: warnings.missingFx.join(', ') })}
             </Text>
           </View>
         )}
@@ -495,6 +472,31 @@ const DashboardScreen = ({ navigation }) => {
           </View>
         )}
 
+        {/* Patrimoine net : dès qu'un bien ou un crédit est saisi */}
+        {!account && (debts.items.length > 0 || realEstate.items.length > 0) && (
+          <TouchableOpacity
+            style={[styles.netCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              navigation.navigate('Wealth');
+            }}
+            accessibilityRole="button"
+          >
+            <View style={styles.netHead}>
+              <Text style={[styles.netLabel, { color: theme.colors.textSecondary }]}>{t('wealth.netWorth')}</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
+            </View>
+            <Text style={[styles.netValue, { color: theme.colors.text }]}>{formatAmount(overview.netWorth, { decimals: 0 })}</Text>
+            <Text style={[styles.netSub, { color: theme.colors.textTertiary }]}>
+              {t('wealth.dashboardLine', {
+                financial: formatAmount(overview.value, { decimals: 0, compact: true }),
+                realEstate: formatAmount(realEstate.value, { decimals: 0, compact: true }),
+                debts: formatAmount(debts.remaining, { decimals: 0, compact: true }),
+              })}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Ma performance : une carte par actif, avec sa courbe sur un mois */}
         {performers.length > 0 && (
           <View style={styles.section}>
@@ -570,13 +572,25 @@ const DashboardScreen = ({ navigation }) => {
           </View>
         )}
 
-        {showPea && <PeaCard pea={pea} onPress={() => navigation.navigate('Settings', { section: 'pea' })} />}
+        {showPea && <PeaCard pea={pea} onPress={() => navigation.navigate('AccountsSettings')} />}
 
         {/* D'où vient la performance : la somme doit se recouper à l'écran. */}
         {!isCash && totals.grossInvested > 0 && (
           <View style={cardStyle}>
-            <Text style={[styles.cardTitle, styles.breakdownTitle, { color: theme.colors.text }]}>{t('dashboard.pnlDetail')}</Text>
-            {[
+            <TouchableOpacity
+              style={styles.breakdownHead}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setShowPnlDetail((v) => !v);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showPnlDetail }}
+            >
+              <Text style={[styles.cardTitle, styles.breakdownTitle, { color: theme.colors.text }]}>{t('dashboard.pnlDetail')}</Text>
+              <Ionicons name={showPnlDetail ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.textTertiary} />
+            </TouchableOpacity>
+            {/* Le détail sur demande : le total et la moyenne par an suffisent d'un coup d'œil. */}
+            {showPnlDetail && [
               ['priceEffect', summary.priceEffect],
               ...(Math.abs(summary.fxEffect) >= 0.5 ? [['fxEffect', summary.fxEffect]] : []),
               ['realizedPnl', summary.realized],
@@ -589,7 +603,7 @@ const DashboardScreen = ({ navigation }) => {
                 </Text>
               </View>
             ))}
-            <View style={[styles.breakdownRow, styles.breakdownTotal, { borderTopColor: theme.colors.borderLight }]}>
+            <View style={[styles.breakdownRow, showPnlDetail && styles.breakdownTotal, { borderTopColor: theme.colors.borderLight }]}>
               <Text style={[styles.breakdownLabel, styles.strong, { color: theme.colors.text }]}>{t('dashboard.totalPnl')}</Text>
               <Text style={[styles.breakdownValue, styles.strong, { color: privacyMode ? theme.colors.text : colorOf(summary.totalPnL) }]}>
                 {formatAmount(summary.totalPnL, { decimals: 0, showSign: true })}
@@ -603,7 +617,7 @@ const DashboardScreen = ({ navigation }) => {
                 </Text>
               </View>
             )}
-            {annualized != null && annualizedReal != null && (
+            {showPnlDetail && annualized != null && annualizedReal != null && (
               <View style={styles.breakdownRow}>
                 <Text style={[styles.breakdownLabel, { color: theme.colors.textSecondary }]}>{t('performance.real')}</Text>
                 <Text style={[styles.breakdownValue, { color: colorOf(annualizedReal) }]}>
@@ -611,7 +625,7 @@ const DashboardScreen = ({ navigation }) => {
                 </Text>
               </View>
             )}
-            {summary.feesPaid > 0 && (
+            {showPnlDetail && summary.feesPaid > 0 && (
               <Text style={[styles.footnote, { color: theme.colors.textTertiary }]}>
                 {t('dashboard.feesIncluded', { amount: formatAmount(summary.feesPaid, { decimals: 0 }) })}
               </Text>
@@ -620,7 +634,6 @@ const DashboardScreen = ({ navigation }) => {
         )}
 
         {!isCash && <YearlyPerformanceCard account={account} />}
-        {/* Planifier sert dès le premier jour (profil, budget) ; Analyser, une fois des placements saisis. */}
         {/* Les marchés reculent : ce que dit l'histoire, ce que ça représente pour toi */}
         {!account && marketAlerts.length > 0 && (
           <TouchableOpacity
@@ -647,34 +660,6 @@ const DashboardScreen = ({ navigation }) => {
             <Text style={[styles.netSub, { color: theme.colors.textSecondary }]}>{t('markets.alertSub')}</Text>
           </TouchableOpacity>
         )}
-
-        {/* Patrimoine net : dès qu'un bien ou un crédit est saisi */}
-        {!account && (debts.items.length > 0 || realEstate.items.length > 0) && (
-          <TouchableOpacity
-            style={[styles.netCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-            onPress={() => {
-              Haptics.selectionAsync();
-              navigation.navigate('Wealth');
-            }}
-            accessibilityRole="button"
-          >
-            <View style={styles.netHead}>
-              <Text style={[styles.netLabel, { color: theme.colors.textSecondary }]}>{t('wealth.netWorth')}</Text>
-              <Ionicons name="chevron-forward" size={16} color={theme.colors.textTertiary} />
-            </View>
-            <Text style={[styles.netValue, { color: theme.colors.text }]}>{formatAmount(overview.netWorth, { decimals: 0 })}</Text>
-            <Text style={[styles.netSub, { color: theme.colors.textTertiary }]}>
-              {t('wealth.dashboardLine', {
-                financial: formatAmount(overview.value, { decimals: 0, compact: true }),
-                realEstate: formatAmount(realEstate.value, { decimals: 0, compact: true }),
-                debts: formatAmount(debts.remaining, { decimals: 0, compact: true }),
-              })}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {!account && <ToolsCard title={t('tools.plan')} items={planTools} navigation={navigation} />}
-        {!account && hasAnything && <ToolsCard title={t('tools.analyze')} items={analyzeTools} navigation={navigation} />}
 
         {!hasAnything && (
           <TouchableOpacity
@@ -736,6 +721,7 @@ const styles = StyleSheet.create({
   perfFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 8 },
   cardTitle: { fontSize: 16, fontWeight: '700' },
+  breakdownHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   breakdownTitle: { marginBottom: 8 },
   breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   breakdownLabel: { fontSize: 14 },

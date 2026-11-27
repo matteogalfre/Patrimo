@@ -29,9 +29,10 @@ import AssetSearchModal from '../components/Transaction/AssetSearchModal';
 import { accountsForType } from '../core/assets';
 import { budgetPlanSuggestions } from '../core/plans';
 import AccountInstitution from '../components/Portfolio/AccountInstitution';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const parseNum = (s) => {
-  const n = Number(String(s ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
+  const n = Number(normalizeNumber(s ?? ''));
   return Number.isFinite(n) ? n : null;
 };
 

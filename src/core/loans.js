@@ -8,11 +8,13 @@
  * deux), pour le patrimoine net.
  */
 
+import { normalizeNumber } from '../utils/parseNumber';
+
 export const LOAN_KINDS = Object.freeze(['mortgage', 'consumer', 'car', 'student', 'works', 'zeroRate', 'other']);
 
 const toNum = (v) => {
   if (v === null || v === undefined || v === '') return null;
-  const n = Number(typeof v === 'string' ? v.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.') : v);
+  const n = Number(typeof v === 'string' ? normalizeNumber(v, 'fr-FR') : v);
   return Number.isFinite(n) ? n : null;
 };
 const toIso = (v) => {

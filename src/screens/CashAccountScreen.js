@@ -37,9 +37,10 @@ import { isRegulated, minimumRate, officialRate } from '../core/regulatedRates';
 import { findInstitution, searchInstitutions } from '../core/institutions';
 import { INSTITUTIONS } from '../constants/institutions';
 import { formatDate, formatPercent } from '../utils/formatters';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const parseNum = (s) => {
-  const str = String(s ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
+  const str = normalizeNumber(s ?? '');
   if (!str) return null;
   const n = Number(str);
   return Number.isFinite(n) ? n : NaN;

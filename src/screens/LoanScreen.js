@@ -17,9 +17,10 @@ import { ConfirmModal } from '../components';
 import DateField from '../components/Transaction/DateField';
 import { earlyRepayment, LOAN_KINDS, loanStatus, monthlyPayment, normalizeLoan } from '../core/loans';
 import { formatDate } from '../utils/formatters';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const parseNum = (s) => {
-  const n = Number(String(s ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
+  const n = Number(normalizeNumber(s ?? ''));
   return Number.isFinite(n) ? n : null;
 };
 const DURATIONS = [5, 10, 15, 20, 25];

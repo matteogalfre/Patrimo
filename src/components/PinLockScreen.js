@@ -8,6 +8,7 @@ import {
   Dimensions,
   Alert,
   Modal,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
@@ -220,15 +221,23 @@ const PinLockScreen = ({
     }
   }, [lockoutUntil, t, onSuccess]);
 
-  // Invite biométrique automatique au montage (une seule fois) une fois le
-  // type détecté, sauf si un lockout est actif.
+  // L'écran se monte dès le passage en arrière-plan : l'invite attend que
+  // l'app soit de nouveau au premier plan, sinon Android la refuse.
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   useEffect(() => {
-    if (mode !== 'unlock' || !biometricEnabled || !biometricType) return;
+    const sub = AppState.addEventListener('change', (state) => setAppActive(state === 'active'));
+    return () => sub.remove();
+  }, []);
+
+  // Invite biométrique automatique (une seule fois) une fois le type détecté
+  // et l'app au premier plan, sauf si un lockout est actif.
+  useEffect(() => {
+    if (mode !== 'unlock' || !biometricEnabled || !biometricType || !appActive) return;
     if (biometricPrompted.current) return;
     if (lockoutUntil > Date.now()) return;
     biometricPrompted.current = true;
     runBiometric();
-  }, [mode, biometricEnabled, biometricType, lockoutUntil, runBiometric]);
+  }, [mode, biometricEnabled, biometricType, appActive, lockoutUntil, runBiometric]);
 
   const handleComplete = useCallback(
     async (pin) => {

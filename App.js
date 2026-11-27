@@ -9,13 +9,15 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeProvider, useTheme } from './src/theme/theme';
-import { PortfolioProvider, usePortfolio } from './src/context/PortfolioContext';
+import { PortfolioProvider } from './src/context/PortfolioContext';
 import { SettingsProvider, useSettings } from './src/context/SettingsContext';
 import { AlertsProvider } from './src/context/AlertsContext';
 import { PlanningProvider } from './src/context/PlanningContext';
 import { BankProvider } from './src/context/BankContext';
+import { DataResetProvider, useDataReset } from './src/context/DataResetContext';
+import { wipeEverything } from './src/services/wipe';
+import { backupService } from './src/services/storage';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import PinLockScreen from './src/components/PinLockScreen';
 import { deletePinHashSecure, clearFailedAttempts } from './src/utils/pinSecurity';
@@ -63,6 +65,8 @@ import LoanScreen from './src/screens/LoanScreen';
 import PropertyScreen from './src/screens/PropertyScreen';
 import HomeBuyScreen from './src/screens/HomeBuyScreen';
 import MarketsScreen from './src/screens/MarketsScreen';
+import ToolsScreen from './src/screens/ToolsScreen';
+import AccountsSettingsScreen from './src/screens/AccountsSettingsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -102,6 +106,9 @@ const TabNavigator = () => {
             case 'Add':
               iconName = focused ? 'add-circle' : 'add-circle-outline';
               break;
+            case 'Tools':
+              iconName = focused ? 'grid' : 'grid-outline';
+              break;
             default:
               iconName = 'ellipse';
           }
@@ -125,6 +132,9 @@ const TabNavigator = () => {
           marginTop: isSmallDevice ? 1 : 2,
         },
         headerShown: false,
+        // Un onglet caché ne se redessine pas à chaque nouveau cours : il se
+        // met à jour quand on y revient.
+        freezeOnBlur: true,
         tabBarButton: (props) => {
           const { onPress, ...rest } = props;
           return (
@@ -156,6 +166,11 @@ const TabNavigator = () => {
         component={AddTransactionScreen}
         options={{ title: t('nav.add') }}
       />
+      <Tab.Screen
+        name="Tools"
+        component={ToolsScreen}
+        options={{ title: t('nav.tools') }}
+      />
     </Tab.Navigator>
   );
 };
@@ -167,6 +182,8 @@ const MainNavigator = () => {
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
+        // Les écrans sous celui qu'on regarde restent figés jusqu'au retour.
+        freezeOnBlur: true,
         cardStyle: { backgroundColor: theme.colors.background },
         gestureEnabled: true,
         animationEnabled: true,
@@ -178,6 +195,7 @@ const MainNavigator = () => {
       <Stack.Screen name="CashAccount" component={CashAccountScreen} />
       <Stack.Screen name="PassiveIncome" component={PassiveIncomeScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="AccountsSettings" component={AccountsSettingsScreen} />
       <Stack.Screen name="Projection" component={ProjectionScreen} />
       <Stack.Screen name="Tax" component={TaxScreen} />
       <Stack.Screen name="Goals" component={GoalsScreen} />
@@ -199,47 +217,47 @@ const MainNavigator = () => {
   );
 };
 
+// Déverrouillée pendant cette session : un remontage de l'app (après « Tout
+// effacer ») ne redemande pas le PIN, un passage en arrière-plan si.
+let unlockedThisSession = false;
+
 const AppContent = () => {
   const theme = useTheme();
   const { pinHash, setPinHash, biometricEnabled, t, isLoading } = useSettings();
-  const { refresh: refreshPortfolio } = usePortfolio();
-  const [isLocked, setIsLocked] = useState(true);
+  const { resetMemory } = useDataReset();
+  const [isLocked, setLockedState] = useState(() => !unlockedThisSession);
+  const setIsLocked = useCallback((locked) => {
+    unlockedThisSession = !locked;
+    setLockedState(locked);
+  }, []);
   const appState = useRef(AppState.currentState);
   const prevPinHash = useRef(pinHash);
   const initialLoadDone = useRef(false);
 
   /**
-   * Last-resort escape hatch from the PIN lock screen. The user has already
-   * passed two destructive confirmations on the lock screen; here we just
-   * carry out the wipe and let the rest of the app react via context
-   * reloads. We don't try to be selective — the entire app state is reset
-   * to first-launch defaults.
+   * Dernier recours depuis l'écran du PIN, après deux confirmations : tout
+   * est effacé (données, réglages, accords bancaires, rappels) et l'app
+   * repart comme au premier lancement.
    */
   const handleForgotPin = useCallback(async () => {
     try {
-      await AsyncStorage.clear();
+      await wipeEverything();
       await deletePinHashSecure();
       await clearFailedAttempts();
     } catch {
-      // Even if individual deletions fail, we still unlock so the user is
-      // not trapped. The remaining stale data will be inconsistent but
-      // recoverable via another reset from Settings.
+      // On déverrouille quand même : l'utilisateur ne doit pas rester bloqué.
     }
     setPinHash(null);
     setIsLocked(false);
-    // Force a portfolio refresh so the contexts re-read the (now empty)
-    // storage instead of showing the previously cached holdings.
-    try {
-      await refreshPortfolio();
-    } catch {
-      // Ignore — the portfolio context will catch up on next render.
-    }
-  }, [setPinHash, refreshPortfolio]);
+    resetMemory();
+  }, [setPinHash, setIsLocked, resetMemory]);
 
   // Lock orientation once at app mount. Per-screen / per-tab calls are
   // redundant because lockAsync is sticky across the entire app session.
   useEffect(() => {
     lockPortrait();
+    // Une sauvegarde partagée lors d'une session précédente ne traîne pas dans le cache.
+    backupService.cleanupExports();
   }, []);
 
   // Track when initial settings load completes
@@ -262,18 +280,18 @@ const AppContent = () => {
       setIsLocked(false);
     }
     prevPinHash.current = pinHash;
-  }, [pinHash]);
+  }, [pinHash, setIsLocked]);
 
-  // Re-lock when app comes back from background (if PIN is set)
+  // Verrouille dès le passage en arrière-plan (si un PIN est défini) : la
+  // vignette des applis récentes et la première image au retour ne montrent
+  // pas les montants.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
-      if (appState.current.match(/inactive|background/) && nextState === 'active' && pinHash) {
-        setIsLocked(true);
-      }
+      if (nextState === 'background' && pinHash) setIsLocked(true);
       appState.current = nextState;
     });
     return () => sub.remove();
-  }, [pinHash]);
+  }, [pinHash, setIsLocked]);
 
   // Thème de navigation pour éviter le flash blanc (mémoïsé pour éviter de
   // re-rendre NavigationContainer à chaque render de AppContent)
@@ -295,6 +313,8 @@ const AppContent = () => {
         <MainNavigator />
       </NavigationContainer>
       <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+      {/* Réglages pas encore lus : on ne sait pas s'il y a un PIN, rien ne s'affiche. */}
+      {isLoading && <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.background }]} />}
       {!isLoading && pinHash && isLocked && (
         <PinLockScreen
           mode="unlock"
@@ -342,9 +362,11 @@ export default function App() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <SettingsProvider>
-            <AppWithErrorBoundary />
-          </SettingsProvider>
+          <DataResetProvider>
+            <SettingsProvider>
+              <AppWithErrorBoundary />
+            </SettingsProvider>
+          </DataResetProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

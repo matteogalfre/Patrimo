@@ -25,14 +25,15 @@ import { useSettings } from '../context/SettingsContext';
 import { usePlanning } from '../context/PlanningContext';
 import DateField from '../components/Transaction/DateField';
 import { useMyNumbers } from '../hooks/useMyNumbers';
-import { averageCashRate, SCENARIOS } from '../core/projection';
+import { averageCashRate, realRate, SCENARIOS } from '../core/projection';
 import { emergencyFund, goalStatus } from '../core/goals';
 import { availableCash } from '../core/cash';
 import { emergencyMonths } from '../core/profile';
 import { formatDate } from '../utils/formatters';
+import { normalizeNumber } from '../utils/parseNumber';
 
 const parseNum = (s) => {
-  const n = Number(String(s ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
+  const n = Number(normalizeNumber(s ?? ''));
   return Number.isFinite(n) ? n : null;
 };
 
@@ -59,7 +60,8 @@ const GoalsScreen = ({ navigation }) => {
   const base = useMemo(() => ({
     invested: Math.max(0, overview.investedValue ?? overview.value - cash.total),
     cash: cash.total,
-    cashRate: averageCashRate(cash.total, cash.yearlyInterest),
+    // En euros d'aujourd'hui : la cible garde son pouvoir d'achat.
+    cashRate: realRate(averageCashRate(cash.total, cash.yearlyInterest)),
     annualRate: SCENARIOS.median,
     monthly,
   }), [overview, cash, monthly]);

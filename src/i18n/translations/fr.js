@@ -24,6 +24,7 @@ export default {
     portfolio: 'Portefeuille',
     add: 'Ajouter',
     settings: 'Réglages',
+    tools: 'Outils',
   },
 
   accounts: {
@@ -70,6 +71,12 @@ export default {
     legendValue: 'Valeur',
     legendInvested: 'Argent investi',
     priceUnavailable: 'Cours indisponible pour {{symbols}} : valorisé à son prix de revient.',
+    staleQuotes: 'Hors ligne : cours du {{date}}, mis à jour dès le retour du réseau.',
+    oversold: {
+      one: '1 vente dépasse la quantité détenue : touche pour vérifier l\'opération.',
+      other: '{{count}} ventes dépassent la quantité détenue : touche pour vérifier.',
+    },
+    missingFx: 'Taux de change introuvable pour {{currencies}} : ces montants sont comptés à 0 en attendant.',
     pendingPrices: '{{count}} opération(s) sans prix : valorisée(s) au cours actuel en attendant l\'historique.',
     noData: 'Ajoute ta première opération pour voir ton patrimoine ici',
     chartLoading: 'Chargement de l\'historique…',
@@ -87,6 +94,7 @@ export default {
     title: 'Portefeuille',
     holdings: 'Positions',
     totalValue: 'Valeur totale',
+    ofWhichCash: 'Placements {{invested}} · liquidités {{cash}}',
     netInvested: 'Investi',
     closed: 'Soldée',
     showClosed: {
@@ -377,7 +385,7 @@ export default {
       missed: 'Manque à gagner si ces {{amount}} restent sur tes comptes {{count}} ans :',
       zero: 'Déplace le curseur pour voir ce que rapporterait une partie de tes liquidités.',
     },
-    note: 'Part de ton patrimoine actuel ({{start}}) : les placements au rendement choisi, les liquidités au taux de leurs livrets. Rendements annuels moyens supposés, avant impôts et inflation : une projection, pas une prévision.',
+    note: 'Part de ton patrimoine actuel ({{start}}). En euros d\'aujourd\'hui : rendements après inflation (les livrets la suivent à peu près), avant impôts. Mêmes hypothèses que l\'écran Indépendance. Une projection, pas une prévision.',
     investedMonthly: 'Investi chaque mois',
     kept: 'Mis de côté sur tes comptes',
     hintBudget: 'D\'après ton budget : {{invest}} investis au rendement choisi, et {{kept}} qui restent sur tes comptes au taux de tes livrets.',
@@ -409,7 +417,7 @@ export default {
       portfolioShort: 'portefeuille {{amount}}',
       exempt: 'Exonéré : cessions totales sous {{amount}} sur l\'année',
       formula: 'Plus-value = prix de cession − prix total d\'acquisition × prix de cession ÷ valeur du portefeuille au moment de la cession.',
-      note: 'Les ventes sont supposées faites contre des euros (un échange entre cryptos n\'est pas imposable). La valeur du portefeuille utilise les cours de clôture du jour : les lignes marquées * sont approximatives. Pense aussi à déclarer tes comptes sur des plateformes étrangères (formulaire 3916-bis).',
+      note: 'Ventes supposées faites contre des euros (un échange entre cryptos n\'est pas imposable). Lignes marquées * : approximatives. Comptes sur des plateformes étrangères : formulaire 3916-bis.',
       empty: 'Aucune vente de crypto en {{year}}.',
     },
     pea: {
@@ -513,7 +521,6 @@ export default {
     biometric: 'Déverrouillage biométrique',
     biometricEnabledMsg: 'Déverrouillage biométrique activé.',
 
-    tools: 'OUTILS',
   },
 
   pinLock: {
@@ -571,7 +578,7 @@ export default {
     ter: 'Frais annuels (TER)',
     terLine: '{{value}} par an, soit environ {{amount}}',
     terRangeLine: '{{range}} par an selon les sources, soit environ {{amount}}',
-    terHint: 'Ajoute le TER pour voir ce qu\'il te coûte',
+    terHint: 'Le TER, ce sont les frais que l\'ETF prélève chaque année. Ajoute-le pour voir ce qu\'il te coûte.',
     terHelp: 'C\'est la ligne « coûts liés au produit » (en %) de la fiche coûts et charges de ton courtier, ou les frais courants du DIC de l\'ETF, souvent entre 0,05 % et 0,50 %.',
     terError: 'Saisis un pourcentage entre 0 et 5.',
     entrySubtitle: 'Ce que te coûtent tes ETF et ton courtage',
@@ -886,21 +893,28 @@ export default {
 
   returns: {
     title: 'Rendement moyen par an',
-    lead: {
-      one: 'En moyenne sur 1 an :',
-      other: 'En moyenne sur {{count}} ans :',
+    over: {
+      one: 'en moyenne sur 1 an',
+      other: 'en moyenne sur {{count}} ans',
     },
     perYear: '{{value}} par an',
     years: {
       one: '1 an',
       other: '{{count}} ans',
     },
-    since: 'Depuis {{year}}',
-    bestWorst: 'Meilleure année : {{bestYear}} ({{best}}) · pire : {{worstYear}} ({{worst}})',
-    note: 'Évolution du cours en {{currency}}, sur l\'historique disponible (jusqu\'à 13 ans). Pour un ETF capitalisant, les dividendes sont déjà dans le cours ; pour une action ou un ETF distribuant, ils s\'ajoutent. Les performances passées ne garantissent pas les performances futures.',
-    indexTitle: 'Sur longue période : {{index}}',
+    indexLine: {
+      one: 'Son indice, {{index}}, sur 1 an :',
+      other: 'Son indice, {{index}}, sur {{count}} ans :',
+    },
+    info: 'Comment lire ces chiffres',
+    note: 'Évolution du cours en {{currency}}. Un ETF capitalisant inclut déjà ses dividendes ; une action ou un ETF distribuant les verse en plus. Le passé ne garantit pas l\'avenir.',
     indexNoteTotal: 'Indice en {{currency}}, dividendes réinvestis : c\'est ce que suit un ETF capitalisant, avant ses frais.',
-    indexNotePrice: 'Indice en {{currency}}, hors dividendes : un ETF capitalisant fait un peu mieux, puisqu\'il réinvestit les dividendes.',
+    indexNotePrice: 'Indice en {{currency}}, hors dividendes : un ETF capitalisant fait un peu mieux, puisqu\'il les réinvestit.',
+  },
+
+  accountsSettings: {
+    title: 'Comptes et courtiers',
+    subtitle: 'PEA, établissement de chaque enveloppe, frais de courtage',
   },
 
   envelopes: {
@@ -908,6 +922,17 @@ export default {
     none: 'Non précisé',
     pickTitle: '{{account}} chez…',
     hint: 'Le logo s\'affiche sur tes enveloppes. Si on connaît la grille de frais de l\'établissement, elle se règle toute seule (sauf si tu as saisi ta propre règle).',
+  },
+
+  about: {
+    section: 'À propos',
+    star: 'Mettre une étoile sur GitHub',
+    starSub: 'Libre et gratuit. Une étoile aide d\'autres personnes à le trouver.',
+    bug: 'Signaler un bug ou proposer une idée',
+    bugSub: 'Sur GitHub, les formulaires disent quoi indiquer.',
+    translate: 'Aider à traduire',
+    translateSub: 'Une phrase maladroite, ou ta langue manque ?',
+    version: 'Patrimo {{version}} · logiciel libre, GPL-3.0',
   },
 
   demo: {
@@ -972,8 +997,8 @@ export default {
       one: 'Avec {{amount}} de plus par mois, tu y serais environ {{count}} an plus tôt.',
       other: 'Avec {{amount}} de plus par mois, tu y serais environ {{count}} ans plus tôt.',
     },
-    assumptions: 'Hypothèses, en euros d\'aujourd\'hui (après inflation) : {{mu}} de rendement moyen par an et {{sigma}} de volatilité, d\'après ta répartition (actions 5 %, crypto 5 % mais très volatile, liquidités 0 %). Ce sont des probabilités, pas des promesses.',
-    chartHint: 'La ligne verte, c\'est le capital visé : là où ta trajectoire la croise (le point vert), tes placements pourraient payer ton train de vie. Les lignes plus pâles montrent une chance sur dix au-dessus et en dessous.',
+    assumptions: 'En euros d\'aujourd\'hui : {{mu}} de rendement moyen par an et {{sigma}} de volatilité (l\'ampleur des hauts et des bas d\'une année), d\'après ta répartition. Des probabilités, pas des promesses.',
+    chartHint: 'Ligne verte : le capital visé. Là où ta trajectoire la croise, tes placements pourraient payer ton train de vie. Lignes pâles : une chance sur dix de faire mieux, ou moins bien.',
     atAge: 'à {{age}} ans',
     likelyAge: '(à {{age}} ans)',
   },
@@ -1347,9 +1372,10 @@ export default {
     title: 'Banques reliées',
     entrySubtitle: 'Les soldes de tes comptes, mis à jour tout seuls',
     introTitle: 'Tes soldes à jour, sans les taper',
-    intro: 'Patrimo lit le nom et le solde de tes comptes (pas tes opérations) via GoCardless, un service agréé DSP2. Tu donnes ton accord sur le site de ta banque : Patrimo ne voit jamais tes identifiants. Chaque solde lu devient une saisie sur ton compte de liquidités, relue toutes les 12 h à l\'ouverture de l\'app.',
+    intro: 'Patrimo lit le solde de tes comptes (pas tes opérations) via GoCardless, un service agréé. Tu donnes ton accord sur le site de ta banque : Patrimo ne voit jamais tes identifiants. Soldes relus toutes les 12 h.',
     demo: 'Mode exemple actif : la connexion bancaire est coupée. Repasse sur tes vraies données dans les réglages pour l\'utiliser.',
     keys: {
+      closed: 'GoCardless n\'accepte plus de nouveaux comptes depuis juillet 2025 : la connexion marche seulement si tu as déjà un compte chez eux. Sinon, saisis tes soldes à la main.',
       title: 'Clés GoCardless',
       steps: '1. Ouvre le portail GoCardless Bank Account Data, puis crée un compte gratuit ou connecte-toi.\n2. Developers, puis User secrets, puis Create new : appelle-la « Patrimo ».\n3. Colle ici le Secret ID et la Secret Key (la clé ne s\'affiche qu\'une fois).',
       portal: 'Ouvrir le portail GoCardless',

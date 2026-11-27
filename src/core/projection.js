@@ -2,15 +2,23 @@
  * Projection du patrimoine : intérêts composés mensuels avec un versement
  * fixe chaque mois (fonctions pures).
  *
- * Les rendements sont des hypothèses annuelles moyennes, avant impôts et
- * inflation : de quoi se projeter, pas une prévision.
+ * Tout est en euros d'aujourd'hui, comme l'écran Indépendance : les
+ * rendements sont réels (après inflation, avant impôts). Le scénario moyen
+ * reprend l'hypothèse des actions mondiales d'Indépendance (5 % au-dessus de
+ * l'inflation) : les deux écrans racontent le même avenir.
  */
 
 export const SCENARIOS = Object.freeze({
   prudent: 2,
   median: 5,
-  optimistic: 8,
+  optimistic: 7,
 });
+
+/** Inflation supposée pour passer un taux de livret en rendement réel. */
+export const INFLATION_ASSUMPTION = 2;
+
+/** Taux réel d'un livret : son taux moins l'inflation (le Livret A la suit à peu près). */
+export const realRate = (nominal) => nominal - INFLATION_ASSUMPTION;
 
 /**
  * @param {{start: number, monthly: number, years: number, annualRate: number}} params
